@@ -1,54 +1,70 @@
 'use client'
 
 import { useThree, useFrame } from '@react-three/fiber'
-import { useScroll } from '@react-three/drei'
-import { useRef, useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 
-export default function CameraController() {
+interface CameraControllerProps {
+  selectedTile: number | null
+  tilePositions: Array<[number, number, number]>
+  onAnimationChange?: (isAnimating: boolean) => void
+}
+
+export default function CameraController({ selectedTile, tilePositions, onAnimationChange }: CameraControllerProps) {
   const { camera } = useThree()
-  const scroll = useScroll()
-  const cameraRef = useRef<THREE.PerspectiveCamera>(null)
+  const [targetPosition, setTargetPosition] = useState<THREE.Vector3 | null>(null)
+  const [targetLookAt, setTargetLookAt] = useState<THREE.Vector3 | null>(null)
+  const isAnimating = useRef(false)
 
-  // Update camera position based on scroll
-  useFrame(() => {
-    if (!cameraRef.current) return
-    
-    const offset = scroll.offset
-    
-    // Camera zoom based on scroll (0 to 1)
-    const zoom = 5 + offset * 10 // Zoom from 5 to 15
-    const yOffset = offset * 2 // Vertical parallax
-    
-    // Smooth camera movement
-    cameraRef.current.position.z = THREE.MathUtils.lerp(
-      cameraRef.current.position.z,
-      zoom,
-      0.1
-    )
-    
-    cameraRef.current.position.y = THREE.MathUtils.lerp(
-      cameraRef.current.position.y,
-      yOffset,
-      0.1
-    )
-    
-    // Rotate camera slightly based on scroll for dynamic feel
-    cameraRef.current.rotation.x = THREE.MathUtils.lerp(
-      cameraRef.current.rotation.x,
-      offset * 0.2,
-      0.05
-    )
-  })
-
-
+  // Handle zoom to selected tile - set target for smooth animation
   useEffect(() => {
-    if (camera instanceof THREE.PerspectiveCamera) {
-      cameraRef.current = camera
-      camera.position.set(0, 0, 5)
-      camera.lookAt(0, 0, 0)
+    if (!(camera instanceof THREE.PerspectiveCamera)) return
+    
+    if (selectedTile !== null && tilePositions[selectedTile]) {
+      const [x, y, z] = tilePositions[selectedTile]
+      // Position camera closer to the tile for zoom effect
+      const zoomDistance = 2.5
+      const offset = new THREE.Vector3(0, 0, zoomDistance)
+      const tilePosition = new THREE.Vector3(x, y, z)
+      
+      // Set target for smooth animation
+      setTargetPosition(tilePosition.clone().add(offset))
+      setTargetLookAt(tilePosition)
+      isAnimating.current = true
+      onAnimationChange?.(true)
+    } else {
+      // When deselected, stop animation and let OrbitControls take over
+      setTargetPosition(null)
+      setTargetLookAt(null)
+      isAnimating.current = false
     }
-  }, [camera])
+  }, [selectedTile, tilePositions, camera])
+
+  // Smooth zoom-in animation when tile is selected
+  useFrame(() => {
+    if (!(camera instanceof THREE.PerspectiveCamera)) return
+    
+    // Only animate during the zoom-in animation
+    // Once complete, let OrbitControls handle everything (including zoom out)
+    if (targetPosition && targetLookAt && isAnimating.current) {
+      // Smoothly animate to target position
+      camera.position.lerp(targetPosition, 0.1)
+      camera.lookAt(targetLookAt)
+      
+      // Check if we're close enough to stop animating
+      const distance = camera.position.distanceTo(targetPosition)
+      if (distance < 0.01) {
+        camera.position.copy(targetPosition)
+        isAnimating.current = false
+        onAnimationChange?.(false)
+        // Clear targets so we don't interfere with OrbitControls
+        setTargetPosition(null)
+        setTargetLookAt(null)
+      }
+    }
+    // After animation completes, CameraController does nothing
+    // OrbitControls has full control for zoom, pan, rotate
+  })
 
   return null
 }

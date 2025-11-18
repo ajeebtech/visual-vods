@@ -1,20 +1,22 @@
 'use client'
 
 import { useRef, useState, useEffect } from 'react'
-import { useFrame } from '@react-three/fiber'
-import { useScroll } from '@react-three/drei'
+import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 
 interface TileProps {
   position: [number, number, number]
   imageUrl?: string
   index: number
+  onSelect?: () => void
+  isSelected?: boolean
 }
 
-export default function Tile({ position, imageUrl, index }: TileProps) {
+export default function Tile({ position, imageUrl, index, onSelect, isSelected }: TileProps) {
   const meshRef = useRef<THREE.Mesh>(null)
-  const scroll = useScroll()
   const [texture, setTexture] = useState<THREE.Texture | null>(null)
+  const [hovered, setHovered] = useState(false)
+  const { raycaster, pointer, camera } = useThree()
   
   // Load texture - fallback to a gradient if no image
   useEffect(() => {
@@ -40,41 +42,57 @@ export default function Tile({ position, imageUrl, index }: TileProps) {
     }
   }, [imageUrl])
 
-  // Animate tile based on scroll position
+  // Animate tile - hover and selection effects (instant, no spring)
   useFrame(() => {
     if (!meshRef.current) return
     
-    const offset = scroll.offset
-    const tileOffset = (offset * 0.5) + (index * 0.1)
+    const targetScale = isSelected ? 2.5 : hovered ? 1.3 : 1
+    meshRef.current.scale.set(targetScale, targetScale, 1)
     
-    // Parallax effect - tiles move at different speeds
-    meshRef.current.position.z = position[2] + tileOffset * 2
-    
-    // Opacity based on scroll and position
-    const opacity = Math.max(0, Math.min(1, 1 - (tileOffset * 0.5)))
+    // Highlight effect when selected or hovered
     if (meshRef.current.material instanceof THREE.MeshStandardMaterial) {
-      meshRef.current.material.opacity = opacity
+      const targetEmissive = isSelected ? 0.3 : hovered ? 0.15 : 0
+      meshRef.current.material.emissive.set(targetEmissive, targetEmissive, targetEmissive)
     }
-    
-    // Subtle rotation for depth
-    meshRef.current.rotation.y = Math.sin(tileOffset) * 0.1
-    meshRef.current.rotation.x = Math.cos(tileOffset) * 0.05
   })
+
+  const handleClick = (e: THREE.Event) => {
+    e.stopPropagation()
+    if (onSelect) {
+      onSelect()
+    }
+  }
+
+  const handlePointerOver = (e: THREE.Event) => {
+    e.stopPropagation()
+    setHovered(true)
+    document.body.style.cursor = 'pointer'
+  }
+
+  const handlePointerOut = () => {
+    setHovered(false)
+    document.body.style.cursor = 'auto'
+  }
 
   return (
     <mesh
       ref={meshRef}
       position={position}
-      scale={[2, 2, 1]}
+      scale={[1, 1, 1]}
+      rotation={[0, 0, 0]}
+      onClick={handleClick}
+      onPointerOver={handlePointerOver}
+      onPointerOut={handlePointerOut}
     >
-      <planeGeometry args={[1, 1, 32, 32]} />
+      <planeGeometry args={[1.2, 1.6, 32, 32]} />
       <meshStandardMaterial
         map={texture || createGradientTexture()}
         transparent
-        opacity={0.9}
-        roughness={0.3}
+        opacity={0.95}
+        roughness={0.2}
         metalness={0.1}
         side={THREE.DoubleSide}
+        emissive={new THREE.Color(0, 0, 0)}
       />
     </mesh>
   )
