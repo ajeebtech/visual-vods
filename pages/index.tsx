@@ -8,7 +8,7 @@ import AILoadingState from '@/components/kokonutui/ai-loading'
 const Scene = dynamic(() => import('../components/Scene'), {
   ssr: false,
 })
-
+//i
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false)
   const [showScene, setShowScene] = useState(false)
