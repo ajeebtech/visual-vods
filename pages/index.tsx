@@ -9,6 +9,8 @@ const Scene = dynamic(() => import('../components/Scene'), {
   ssr: false,
 })
 //i
+import Sidebar from '@/components/Sidebar'
+
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false)
   const [showScene, setShowScene] = useState(false)
@@ -44,8 +46,10 @@ export default function Home() {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
       <main className="relative w-full h-screen overflow-hidden bg-gray-100">
+        <Sidebar />
+
         {/* Search bar - always visible at bottom */}
-        <div className="fixed bottom-0 left-0 right-0 flex items-end justify-center pb-8 z-50">
+        <div className="fixed bottom-0 left-0 right-0 flex items-end justify-center pb-8 z-50 pl-20">
           <div className="w-full max-w-3xl px-4">
             <form onSubmit={handleSubmit} className="relative flex items-center gap-2">
               {/* Left button */}
@@ -55,13 +59,13 @@ export default function Home() {
                 aria-label="Options"
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="4" cy="4" r="1.5" fill="#666"/>
-                  <circle cx="12" cy="4" r="1.5" fill="#666"/>
-                  <circle cx="4" cy="12" r="1.5" fill="#666"/>
-                  <circle cx="12" cy="12" r="1.5" fill="#666"/>
+                  <circle cx="4" cy="4" r="1.5" fill="#666" />
+                  <circle cx="12" cy="4" r="1.5" fill="#666" />
+                  <circle cx="4" cy="12" r="1.5" fill="#666" />
+                  <circle cx="12" cy="12" r="1.5" fill="#666" />
                 </svg>
               </button>
-              
+
               {/* Main input */}
               <input
                 type="text"
@@ -72,7 +76,7 @@ export default function Home() {
                 className="flex-1 h-10 px-4 rounded-lg bg-white border border-gray-300 text-black placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 style={{ color: '#000000' }}
               />
-              
+
               {/* Right buttons */}
               <button
                 type="button"
@@ -80,10 +84,10 @@ export default function Home() {
                 aria-label="Add"
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M8 3V13M3 8H13" stroke="#666" strokeWidth="2" strokeLinecap="round"/>
+                  <path d="M8 3V13M3 8H13" stroke="#666" strokeWidth="2" strokeLinecap="round" />
                 </svg>
               </button>
-              
+
               <button
                 type="submit"
                 disabled={!prompt.trim()}
@@ -91,7 +95,7 @@ export default function Home() {
                 aria-label="Submit"
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M3 8L13 8M10 5L13 8L10 11" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M3 8L13 8M10 5L13 8L10 11" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </button>
             </form>
@@ -105,9 +109,9 @@ export default function Home() {
               initial={{ y: '100%', opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: '100%', opacity: 0 }}
-              transition={{ 
-                type: 'spring', 
-                damping: 25, 
+              transition={{
+                type: 'spring',
+                damping: 25,
                 stiffness: 200,
                 duration: 0.5
               }}

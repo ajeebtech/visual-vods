@@ -17,7 +17,7 @@ export default function Tile({ position, imageUrl, index, onSelect, isSelected }
   const [texture, setTexture] = useState<THREE.Texture | null>(null)
   const [hovered, setHovered] = useState(false)
   const { raycaster, pointer, camera } = useThree()
-  
+
   // Load texture - fallback to a gradient if no image
   useEffect(() => {
     if (imageUrl) {
@@ -45,10 +45,10 @@ export default function Tile({ position, imageUrl, index, onSelect, isSelected }
   // Animate tile - hover and selection effects (instant, no spring)
   useFrame(() => {
     if (!meshRef.current) return
-    
+
     const targetScale = isSelected ? 2.5 : hovered ? 1.3 : 1
     meshRef.current.scale.set(targetScale, targetScale, 1)
-    
+
     // Highlight effect when selected or hovered
     if (meshRef.current.material instanceof THREE.MeshStandardMaterial) {
       const targetEmissive = isSelected ? 0.3 : hovered ? 0.15 : 0
@@ -104,14 +104,14 @@ function createGradientTexture(): THREE.Texture {
   canvas.width = 512
   canvas.height = 512
   const ctx = canvas.getContext('2d')!
-  
+
   const gradient = ctx.createLinearGradient(0, 0, 512, 512)
   gradient.addColorStop(0, '#667eea')
   gradient.addColorStop(1, '#764ba2')
-  
+
   ctx.fillStyle = gradient
   ctx.fillRect(0, 0, 512, 512)
-  
+
   const texture = new THREE.CanvasTexture(canvas)
   texture.needsUpdate = true
   return texture
