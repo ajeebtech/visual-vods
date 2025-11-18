@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState, useEffect } from 'react'
-import { useFrame, useThree } from '@react-three/fiber'
+import { useFrame, useThree, ThreeEvent } from '@react-three/fiber'
 import * as THREE from 'three'
 
 interface TileProps {
@@ -56,14 +56,14 @@ export default function Tile({ position, imageUrl, index, onSelect, isSelected }
     }
   })
 
-  const handleClick = (e: THREE.Event) => {
+  const handleClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation()
     if (onSelect) {
       onSelect()
     }
   }
 
-  const handlePointerOver = (e: THREE.Event) => {
+  const handlePointerOver = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation()
     setHovered(true)
     document.body.style.cursor = 'pointer'
