@@ -65,7 +65,8 @@ export default function SettingsModal({
         return
       }
 
-      // Try to list buckets - if it fails, we'll try uploading anyway
+      // Try to list buckets - if it fails or returns empty, we'll try uploading anyway
+      // (The bucket might exist but we don't have permission to list buckets)
       let buckets: any[] = []
       const { data: bucketsData, error: listError } = await supabase.storage.listBuckets()
       
@@ -76,28 +77,16 @@ export default function SettingsModal({
         buckets = bucketsData || []
       }
 
-      console.log('Available buckets:', buckets?.map(b => b.name))
+      console.log('Available buckets:', buckets?.map(b => b.name) || '[] (might be permission issue)')
 
       const avatarsBucket = buckets?.find(b => b.name === 'avatars')
       
-      // If bucket list is empty, the bucket likely doesn't exist
+      // If we can't list buckets or the list is empty, we'll try uploading anyway
+      // The bucket might exist but we just don't have permission to list it
       if (buckets.length === 0) {
-        setError(
-          'Storage bucket "avatars" not found. The bucket list is empty.\n\n' +
-          'Please create the "avatars" bucket in Supabase:\n\n' +
-          '1. Go to your Supabase Dashboard\n' +
-          '2. Navigate to Storage → Buckets\n' +
-          '3. Click "New bucket"\n' +
-          '4. Name: avatars (exactly, lowercase)\n' +
-          '5. Toggle "Public bucket" ON (important!)\n' +
-          '6. Click "Create bucket"\n\n' +
-          'After creating the bucket, try uploading again.'
-        )
-        setUploading(false)
-        return
-      }
-      
-      if (buckets.length > 0 && !avatarsBucket) {
+        console.log('Bucket list is empty - this might be a permissions issue. Attempting upload anyway...')
+        // Don't return - continue to try uploading
+      } else if (buckets.length > 0 && !avatarsBucket) {
         setError(
           'Storage bucket "avatars" not found. Found buckets: ' + buckets.map(b => b.name).join(', ') + '\n\n' +
           'Please create the "avatars" bucket:\n' +
@@ -113,6 +102,8 @@ export default function SettingsModal({
 
       if (avatarsBucket) {
         console.log('Avatars bucket found:', avatarsBucket)
+      } else {
+        console.log('Avatars bucket not found in list, but attempting upload anyway (might be permission issue)')
       }
 
       // Create a unique file name - upload directly to bucket root
@@ -179,8 +170,25 @@ export default function SettingsModal({
             const { data: { publicUrl } } = supabase.storage
               .from('avatars')
               .getPublicUrl(retryFileName)
+            console.log('Avatar uploaded (retry), public URL:', publicUrl)
             setAvatarUrl(publicUrl)
             setSuccess('Profile picture uploaded successfully!')
+            
+            // Auto-save the avatar URL immediately after upload
+            try {
+              const { data: { user } } = await supabase.auth.getUser()
+              if (user) {
+                const { error: updateError } = await supabase.auth.updateUser({
+                  data: { avatar_url: publicUrl }
+                })
+                if (!updateError && onUpdate) {
+                  setTimeout(() => onUpdate(), 300)
+                }
+              }
+            } catch (err) {
+              console.warn('Error auto-saving avatar:', err)
+            }
+            
             setUploading(false)
             return
           }
@@ -196,8 +204,91 @@ export default function SettingsModal({
         .from('avatars')
         .getPublicUrl(filePath)
 
+      console.log('Avatar uploaded, public URL:', publicUrl)
       setAvatarUrl(publicUrl)
       setSuccess('Profile picture uploaded successfully!')
+      
+      // Auto-save the avatar URL immediately after upload
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          // Update user metadata immediately
+          // Use 'custom_avatar_url' to avoid conflicts with Google OAuth which sets 'avatar_url'
+          console.log('💾 Attempting to save custom_avatar_url to user_metadata:', publicUrl)
+          console.log('📋 Current user metadata before save:', user.user_metadata)
+          
+          const { data: updateData, error: updateError } = await supabase.auth.updateUser({
+            data: { 
+              custom_avatar_url: publicUrl,
+              avatar_url: publicUrl  // Also save to avatar_url for backwards compatibility
+            }
+          })
+          
+          if (updateError) {
+            console.error('❌ Could not auto-save avatar to user metadata:', updateError)
+            console.error('Error details:', {
+              message: updateError.message,
+              status: updateError.status,
+              error: updateError
+            })
+            setError(`Failed to save profile picture: ${updateError.message}. Please try clicking "Save Changes" manually.`)
+            
+            // Try profiles table as fallback
+            try {
+              await supabase
+                .from('profiles')
+                .upsert({
+                  id: user.id,
+                  avatar_url: publicUrl,
+                  updated_at: new Date().toISOString()
+                }, { onConflict: 'id' })
+              console.log('✅ Saved to profiles table as fallback')
+            } catch (err) {
+              console.warn('Could not save to profiles table:', err)
+            }
+          } else {
+            console.log('✅ Avatar URL auto-saved to user metadata')
+            console.log('📋 Update response:', updateData)
+            console.log('📋 Updated user data from response:', updateData?.user?.user_metadata)
+            
+            // Wait a bit for Supabase to sync
+            await new Promise(resolve => setTimeout(resolve, 1000))
+            
+            // Verify it was saved by fetching again (multiple times to ensure sync)
+            let verifyAttempts = 0
+            let saved = false
+            while (verifyAttempts < 3 && !saved) {
+              const { data: { user: verifyUser } } = await supabase.auth.getUser()
+              console.log(`🔍 Verification attempt ${verifyAttempts + 1} - user_metadata:`, verifyUser?.user_metadata)
+              
+              if (verifyUser?.user_metadata?.custom_avatar_url === publicUrl || 
+                  verifyUser?.user_metadata?.avatar_url === publicUrl) {
+                console.log('✅ Verified: Avatar URL is saved in user_metadata!')
+                saved = true
+              } else {
+                verifyAttempts++
+                if (verifyAttempts < 3) {
+                  console.log('⏳ Waiting for sync...')
+                  await new Promise(resolve => setTimeout(resolve, 500))
+                } else {
+                  console.warn('⚠️ Avatar URL not found in user_metadata after multiple attempts')
+                  setError('Avatar uploaded but may not have saved. Please refresh the page or click "Save Changes".')
+                }
+              }
+            }
+            
+            // Trigger update callback to refresh sidebar
+            if (onUpdate) {
+              setTimeout(() => {
+                onUpdate()
+              }, 800)
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Error auto-saving avatar:', err)
+      }
+      
       setUploading(false)
     } catch (err: any) {
       setError(err.message || 'Failed to upload image')
@@ -221,7 +312,7 @@ export default function SettingsModal({
       }
 
       // Update user metadata
-      const updates: { display_name?: string; username?: string; avatar_url?: string } = {}
+      const updates: { display_name?: string; username?: string; avatar_url?: string; custom_avatar_url?: string } = {}
       
       if (username !== currentUsername) {
         updates.display_name = username
@@ -229,16 +320,38 @@ export default function SettingsModal({
       }
       
       if (avatarUrl && avatarUrl !== currentAvatarUrl) {
+        // Save to both custom_avatar_url (priority) and avatar_url (backwards compatibility)
+        updates.custom_avatar_url = avatarUrl
         updates.avatar_url = avatarUrl
+        console.log('💾 Saving avatar URL in handleSave:', avatarUrl)
       }
 
       // Update user metadata in Supabase
-      const { error: updateError } = await supabase.auth.updateUser({
+      console.log('💾 Updating user metadata with:', updates)
+      const { data: updateData, error: updateError } = await supabase.auth.updateUser({
         data: updates
       })
+      
+      console.log('📋 Update response:', updateData)
+      console.log('📋 Error (if any):', updateError)
 
       if (updateError) {
-        // If updateUser doesn't work, try updating the profiles table (if it exists)
+        console.error('❌ Failed to update user metadata:', updateError)
+        setError(`Failed to save: ${updateError.message}`)
+        setIsLoading(false)
+        return
+      } else {
+        console.log('✅ User metadata updated successfully')
+        console.log('📋 Updated user from response:', updateData?.user?.user_metadata)
+        
+        // Verify the save
+        await new Promise(resolve => setTimeout(resolve, 500))
+        const { data: { user: verifyUser } } = await supabase.auth.getUser()
+        console.log('🔍 Verification after save - user_metadata:', verifyUser?.user_metadata)
+      }
+      
+      // Also try updating the profiles table (if it exists) as a backup
+      if (avatarUrl) {
         try {
           const { error: profileError } = await supabase
             .from('profiles')
@@ -254,6 +367,8 @@ export default function SettingsModal({
           if (profileError) {
             // If profiles table doesn't exist, that's okay - we'll just use user metadata
             console.warn('Profiles table not available, using user metadata only:', profileError.message)
+          } else {
+            console.log('✅ Also saved to profiles table')
           }
         } catch (err) {
           // Profiles table might not exist, that's okay

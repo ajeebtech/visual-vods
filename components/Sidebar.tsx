@@ -55,78 +55,119 @@ export default function Sidebar() {
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
     const sidebarRef = useRef<HTMLDivElement>(null)
 
-    // Fetch user profile data
+    // Debug: Log when avatarUrl changes
     useEffect(() => {
-        const fetchUserProfile = async () => {
-            try {
-                const { data: { user } } = await supabase.auth.getUser()
-                if (user) {
-                    // First, try to fetch from profiles table (highest priority - user's saved custom username)
-                    let savedUsername: string | null = null
-                    let savedAvatar: string | null = null
-                    
-                    try {
-                        const { data: profileData, error: profileError } = await supabase
-                            .from('profiles')
-                            .select('username, avatar_url')
-                            .eq('id', user.id)
-                            .single()
+        console.log('🔄 avatarUrl state changed:', avatarUrl)
+    }, [avatarUrl])
 
-                        if (!profileError && profileData) {
-                            if (profileData.username) savedUsername = profileData.username
-                            if (profileData.avatar_url) savedAvatar = profileData.avatar_url
-                        }
-                    } catch (err: any) {
-                        // Profiles table doesn't exist or has RLS issues - that's okay
-                        // 406 errors are expected if the table doesn't exist or has RLS restrictions
-                        if (err?.code !== 'PGRST116' && err?.status !== 406) {
-                            console.log('Profiles table not available, using user metadata only')
-                        }
-                    }
+    // Fetch user profile data
+    const fetchUserProfile = async () => {
+        try {
+            console.log('📥 Fetching user profile...')
+            const { data: { user } } = await supabase.auth.getUser()
+            console.log('User fetched:', { id: user?.id, metadata: user?.user_metadata })
+            
+            if (user) {
+                // First, try to fetch from profiles table (highest priority - user's saved custom username)
+                let savedUsername: string | null = null
+                let savedAvatar: string | null = null
+                
+                try {
+                    const { data: profileData, error: profileError } = await supabase
+                        .from('profiles')
+                        .select('username, avatar_url')
+                        .eq('id', user.id)
+                        .single()
 
-                    // Priority order for username:
-                    // 1. Saved username from profiles table
-                    // 2. Saved display_name from user_metadata (user's custom name)
-                    // 3. Saved username from user_metadata
-                    // 4. Google OAuth full_name (fallback)
-                    // 5. Email username (fallback)
-                    const displayName = savedUsername || 
-                                      user.user_metadata?.display_name || 
-                                      user.user_metadata?.username || 
-                                      user.user_metadata?.full_name || 
-                                      user.email?.split('@')[0] || 
-                                      'User Name'
-                    
-                    // Priority order for avatar:
-                    // 1. Saved avatar from profiles table
-                    // 2. Saved avatar_url from user_metadata (user's custom avatar)
-                    // 3. Google OAuth picture (fallback)
-                    let avatar = savedAvatar || 
-                                user.user_metadata?.avatar_url || 
-                                user.user_metadata?.picture || 
-                                null
-                    
-                    // If avatar is a storage path (not a full URL), convert it to a public URL
-                    if (avatar && !avatar.startsWith('http')) {
-                        // It's a storage path, get the public URL
-                        const { data: { publicUrl } } = supabase.storage
-                            .from('avatars')
-                            .getPublicUrl(avatar)
-                        avatar = publicUrl
+                    if (!profileError && profileData) {
+                        if (profileData.username) savedUsername = profileData.username
+                        if (profileData.avatar_url) savedAvatar = profileData.avatar_url
                     }
-                    
-                    setUsername(displayName)
-                    setAvatarUrl(avatar)
-                } else {
-                    // No user, reset to defaults
-                    setUsername('User Name')
-                    setAvatarUrl(null)
+                } catch (err: any) {
+                    // Profiles table doesn't exist or has RLS issues - that's okay
+                    // 406 errors are expected if the table doesn't exist or has RLS restrictions
+                    // Silently ignore these errors - we'll use user_metadata instead
+                    if (err?.code !== 'PGRST116' && err?.status !== 406) {
+                        console.log('Profiles table not available, using user metadata only')
+                    }
                 }
-            } catch (error) {
-                console.error('Error fetching user profile:', error)
-            }
-        }
 
+                // Priority order for username:
+                // 1. Saved username from profiles table
+                // 2. Saved display_name from user_metadata (user's custom name)
+                // 3. Saved username from user_metadata
+                // 4. Google OAuth full_name (fallback)
+                // 5. Email username (fallback)
+                const displayName = savedUsername || 
+                                  user.user_metadata?.display_name || 
+                                  user.user_metadata?.username || 
+                                  user.user_metadata?.full_name || 
+                                  user.email?.split('@')[0] || 
+                                  'User Name'
+                
+                // Priority order for avatar:
+                // 1. Saved avatar from profiles table
+                // 2. custom_avatar_url from user_metadata (user's uploaded custom avatar - highest priority)
+                // 3. avatar_url from user_metadata (but only if it's from Supabase Storage, not Google)
+                // 4. Google OAuth picture (fallback)
+                console.log('🔍 Avatar priority check:', {
+                    savedAvatarFromTable: savedAvatar,
+                    customAvatarUrl: user.user_metadata?.custom_avatar_url,
+                    userMetadataAvatarUrl: user.user_metadata?.avatar_url,
+                    userMetadataPicture: user.user_metadata?.picture,
+                    fullUserMetadata: user.user_metadata
+                })
+                
+                // Check if avatar_url is from Supabase Storage (not Google)
+                const avatarUrl = user.user_metadata?.avatar_url
+                const isSupabaseStorageUrl = avatarUrl && avatarUrl.includes('supabase.co/storage')
+                
+                let avatar = savedAvatar || 
+                            user.user_metadata?.custom_avatar_url ||  // Custom uploaded avatar (highest priority)
+                            (isSupabaseStorageUrl ? avatarUrl : null) ||  // Only use avatar_url if it's from Supabase
+                            user.user_metadata?.picture ||  // Google picture as fallback
+                            null
+                
+                console.log('🎯 Final avatar selected:', avatar, 'source:', 
+                    savedAvatar ? 'profiles table' :
+                    user.user_metadata?.custom_avatar_url ? 'user_metadata.custom_avatar_url (uploaded)' :
+                    isSupabaseStorageUrl ? 'user_metadata.avatar_url (Supabase Storage)' :
+                    user.user_metadata?.picture ? 'user_metadata.picture (Google)' :
+                    'none')
+                
+                // If avatar is a storage path (not a full URL), convert it to a public URL
+                if (avatar && !avatar.startsWith('http')) {
+                    // It's a storage path, get the public URL
+                    const { data: { publicUrl } } = supabase.storage
+                        .from('avatars')
+                        .getPublicUrl(avatar)
+                    avatar = publicUrl
+                }
+                
+                setUsername(displayName)
+                setAvatarUrl(avatar)
+                console.log('Profile loaded:', { 
+                    displayName, 
+                    avatar, 
+                    hasAvatar: !!avatar,
+                    avatarUrlState: avatar,
+                    avatarLength: avatar?.length || 0,
+                    userMetadata: user.user_metadata,
+                    savedAvatarFromTable: savedAvatar,
+                    finalAvatar: avatar
+                })
+                console.log('🔍 Setting avatarUrl state to:', avatar)
+            } else {
+                // No user, reset to defaults
+                setUsername('User Name')
+                setAvatarUrl(null)
+            }
+        } catch (error) {
+            console.error('Error fetching user profile:', error)
+        }
+    }
+
+    useEffect(() => {
         fetchUserProfile()
 
         // Listen for auth state changes
@@ -161,31 +202,13 @@ export default function Sidebar() {
     }, [isExpanded])
 
     const handleSettingsUpdate = async () => {
-        // Refresh profile data after settings update
-        try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (user) {
-                const displayName = user.user_metadata?.display_name || user.user_metadata?.username || user.email?.split('@')[0] || 'User Name'
-                const avatar = user.user_metadata?.avatar_url || null
-                
-                setUsername(displayName)
-                setAvatarUrl(avatar)
-
-                // Also try to fetch from profiles table
-                const { data: profileData } = await supabase
-                    .from('profiles')
-                    .select('username, avatar_url')
-                    .eq('id', user.id)
-                    .single()
-
-                if (profileData) {
-                    if (profileData.username) setUsername(profileData.username)
-                    if (profileData.avatar_url) setAvatarUrl(profileData.avatar_url)
-                }
-            }
-        } catch (error) {
-            console.error('Error refreshing profile:', error)
-        }
+        console.log('🔄 Settings update triggered - refreshing profile...')
+        // Wait a moment for Supabase to sync the user metadata update
+        await new Promise(resolve => setTimeout(resolve, 800))
+        
+        // Simply call fetchUserProfile to refresh everything
+        await fetchUserProfile()
+        console.log('✅ Profile refresh complete')
     }
 
     return (
@@ -398,15 +421,27 @@ export default function Sidebar() {
                     }}
                 >
                     <button className="flex items-center gap-4">
+                        {/* Debug: Show current state */}
+                        {process.env.NODE_ENV === 'development' && (
+                            <div style={{ display: 'none' }}>
+                                {console.log('🎨 Rendering profile button - avatarUrl:', avatarUrl, 'type:', typeof avatarUrl, 'isTruthy:', !!avatarUrl)}
+                            </div>
+                        )}
                         <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 flex-shrink-0 border-2 border-gray-300 relative">
                             {avatarUrl ? (
                                 <img
+                                    key={`avatar-${avatarUrl}`}
                                     src={avatarUrl}
                                     alt="Profile"
                                     className="w-full h-full object-cover block"
                                     style={{ display: 'block' }}
+                                    onLoad={() => {
+                                        console.log('✅ Profile image loaded successfully in sidebar:', avatarUrl)
+                                    }}
                                     onError={(e) => {
                                         // Fallback to default avatar if image fails to load
+                                        console.error('❌ Profile image failed to load:', avatarUrl)
+                                        console.error('Image error details:', e)
                                         const target = e.target as HTMLImageElement
                                         target.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`
                                     }}

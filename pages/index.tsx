@@ -23,6 +23,21 @@ export default function Home() {
   const [tournament, setTournament] = useState('')
   const [playerName, setPlayerName] = useState('')
 
+  // Clear player name when team1 or team2 is set
+  const handleTeam1Change = (value: string) => {
+    setTeam1(value)
+    if (value) {
+      setPlayerName('') // Clear player name when team is selected
+    }
+  }
+
+  const handleTeam2Change = (value: string) => {
+    setTeam2(value)
+    if (value) {
+      setPlayerName('') // Clear player name when team is selected
+    }
+  }
+
   // Helper function to fetch from VLR.gg autocomplete API via our proxy
   const fetchVLRResults = async (query: string) => {
     if (!query.trim()) return []
@@ -210,14 +225,30 @@ export default function Home() {
                 <SearchableSelect
                   placeholder="Team 1"
                   value={team1}
-                  onChange={setTeam1}
+                  onChange={handleTeam1Change}
                   onSearch={searchTeam1}
                   className="flex-1 min-w-[150px]"
                 />
+                
+                {/* VS Divider */}
+                <AnimatePresence>
+                  {(team1 || team2) && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      transition={{ duration: 0.2 }}
+                      className="flex items-center justify-center px-3 py-1.5 rounded-lg bg-gradient-to-r from-gray-800 to-gray-900 text-white font-bold text-sm shadow-md flex-shrink-0"
+                    >
+                      <span className="tracking-wider">VS</span>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                
                 <SearchableSelect
                   placeholder="Team 2"
                   value={team2}
-                  onChange={setTeam2}
+                  onChange={handleTeam2Change}
                   onSearch={searchTeam2}
                   className="flex-1 min-w-[150px]"
                 />
@@ -234,6 +265,7 @@ export default function Home() {
                   onChange={setPlayerName}
                   onSearch={searchPlayerName}
                   className="flex-1 min-w-[150px]"
+                  disabled={!!team1 || !!team2}
                 />
               </div>
 

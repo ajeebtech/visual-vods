@@ -26,6 +26,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
+  const [isSignUp, setIsSignUp] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -50,6 +51,33 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
       router.reload()
     } catch (err: any) {
       setError(err.message || 'Failed to sign in')
+      setIsLoading(false)
+    }
+  }
+
+  const handleEmailSignUp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const { error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      })
+
+      if (signUpError) throw signUpError
+
+      // Success - show success message
+      setError(null)
+      alert('Sign up successful! Please check your email to verify your account.')
+      setIsSignUp(false) // Switch back to login mode
+      setIsLoading(false)
+    } catch (err: any) {
+      setError(err.message || 'Failed to sign up')
       setIsLoading(false)
     }
   }
@@ -94,14 +122,16 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
             <span className="sr-only">Close</span>
           </button>
           <CardTitle className="text-2xl font-semibold text-gray-900">
-            Login to your account
+            {isSignUp ? 'Create an account' : 'Login to your account'}
           </CardTitle>
           <CardDescription className="text-gray-600">
-            Enter your email below to login to your account
+            {isSignUp
+              ? 'Enter your email below to create your account'
+              : 'Enter your email below to login to your account'}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleEmailLogin} className="space-y-4">
+          <form onSubmit={isSignUp ? handleEmailSignUp : handleEmailLogin} className="space-y-4">
             {error && (
               <div className="rounded-md bg-red-50 p-3 text-sm text-red-800">
                 {error}
@@ -135,16 +165,18 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 >
                   Password
                 </label>
-                <button
-                  type="button"
-                  className="text-sm text-gray-600 hover:text-gray-900 underline"
-                  onClick={() => {
-                    // TODO: Implement forgot password
-                    alert('Forgot password functionality coming soon!')
-                  }}
-                >
-                  Forgot your password?
-                </button>
+                {!isSignUp && (
+                  <button
+                    type="button"
+                    className="text-sm text-gray-600 hover:text-gray-900 underline"
+                    onClick={() => {
+                      // TODO: Implement forgot password
+                      alert('Forgot password functionality coming soon!')
+                    }}
+                  >
+                    Forgot your password?
+                  </button>
+                )}
               </div>
               <Input
                 id="password"
@@ -152,6 +184,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                minLength={6}
                 className="bg-white border-gray-300 text-gray-900"
                 disabled={isLoading}
               />
@@ -162,9 +195,26 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
               className="w-full bg-gray-900 text-white hover:bg-gray-800"
               disabled={isLoading}
             >
-              {isLoading ? 'Loading...' : 'Login'}
+              {isLoading ? 'Loading...' : isSignUp ? 'Sign Up' : 'Login'}
             </Button>
           </form>
+
+          {/* Toggle between login and sign up */}
+          <div className="mt-4 text-center">
+            <p className="text-sm text-gray-600">
+              {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSignUp(!isSignUp)
+                  setError(null)
+                }}
+                className="text-gray-900 font-medium hover:underline"
+              >
+                {isSignUp ? 'Login' : 'Sign up'}
+              </button>
+            </p>
+          </div>
 
           <div className="mt-4">
             <Button
