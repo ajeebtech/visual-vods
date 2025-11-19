@@ -76,9 +76,12 @@ export default function Sidebar() {
                             if (profileData.username) savedUsername = profileData.username
                             if (profileData.avatar_url) savedAvatar = profileData.avatar_url
                         }
-                    } catch (err) {
+                    } catch (err: any) {
                         // Profiles table doesn't exist or has RLS issues - that's okay
-                        console.log('Profiles table not available, using user metadata only')
+                        // 406 errors are expected if the table doesn't exist or has RLS restrictions
+                        if (err?.code !== 'PGRST116' && err?.status !== 406) {
+                            console.log('Profiles table not available, using user metadata only')
+                        }
                     }
 
                     // Priority order for username:
@@ -98,10 +101,19 @@ export default function Sidebar() {
                     // 1. Saved avatar from profiles table
                     // 2. Saved avatar_url from user_metadata (user's custom avatar)
                     // 3. Google OAuth picture (fallback)
-                    const avatar = savedAvatar || 
-                                 user.user_metadata?.avatar_url || 
-                                 user.user_metadata?.picture || 
-                                 null
+                    let avatar = savedAvatar || 
+                                user.user_metadata?.avatar_url || 
+                                user.user_metadata?.picture || 
+                                null
+                    
+                    // If avatar is a storage path (not a full URL), convert it to a public URL
+                    if (avatar && !avatar.startsWith('http')) {
+                        // It's a storage path, get the public URL
+                        const { data: { publicUrl } } = supabase.storage
+                            .from('avatars')
+                            .getPublicUrl(avatar)
+                        avatar = publicUrl
+                    }
                     
                     setUsername(displayName)
                     setAvatarUrl(avatar)
@@ -386,12 +398,13 @@ export default function Sidebar() {
                     }}
                 >
                     <button className="flex items-center gap-4">
-                        <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 flex-shrink-0 border-2 border-gray-300">
+                        <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 flex-shrink-0 border-2 border-gray-300 relative">
                             {avatarUrl ? (
                                 <img
                                     src={avatarUrl}
                                     alt="Profile"
-                                    className="w-full h-full object-cover"
+                                    className="w-full h-full object-cover block"
+                                    style={{ display: 'block' }}
                                     onError={(e) => {
                                         // Fallback to default avatar if image fails to load
                                         const target = e.target as HTMLImageElement
@@ -422,7 +435,7 @@ export default function Sidebar() {
 
                 {/* Auth Button */}
                 <div className="pt-4 border-t border-gray-200">
-                    <AuthButton />
+                    <AuthButton isSidebarExpanded={isExpanded} />
                 </div>
             </div>
 

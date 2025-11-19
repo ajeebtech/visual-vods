@@ -3,6 +3,7 @@ import dynamic from 'next/dynamic'
 import Head from 'next/head'
 import { motion, AnimatePresence } from 'framer-motion'
 import AILoadingState from '@/components/kokonutui/ai-loading'
+import SearchableSelect from '@/components/SearchableSelect'
 
 // Dynamically import Scene to avoid SSR issues with Three.js
 const Scene = dynamic(() => import('../components/Scene'), {
@@ -14,26 +15,136 @@ import Sidebar from '@/components/Sidebar'
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false)
   const [showScene, setShowScene] = useState(false)
-  const [prompt, setPrompt] = useState('')
   const [hasSubmitted, setHasSubmitted] = useState(false)
+  
+  // Search state
+  const [team1, setTeam1] = useState('')
+  const [team2, setTeam2] = useState('')
+  const [tournament, setTournament] = useState('')
+  const [playerName, setPlayerName] = useState('')
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (prompt.trim()) {
-      setHasSubmitted(true)
-      setIsLoading(true)
-      // Longer delay to show loading, then show scene
-      setTimeout(() => {
-        setShowScene(true)
-        setIsLoading(false)
-      }, 5000) // 5 seconds
+  // Helper function to fetch from VLR.gg autocomplete API via our proxy
+  const fetchVLRResults = async (query: string) => {
+    if (!query.trim()) return []
+    
+    try {
+      const response = await fetch(
+        `/api/vlr-search?term=${encodeURIComponent(query)}`
+      )
+      if (!response.ok) return []
+      
+      const data = await response.json()
+      return data || []
+    } catch (error) {
+      console.error('Error fetching from VLR.gg:', error)
+      return []
     }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && prompt.trim()) {
+  // Search functions using VLR.gg API
+  const searchTeam1 = async (query: string): Promise<string[]> => {
+    const results = await fetchVLRResults(query)
+    if (!results.length) return []
+    
+    // Find the index of the "teams" category header
+    const teamsIndex = results.findIndex((item: any) => item.value === 'teams' && item.id === '#')
+    if (teamsIndex === -1) return []
+    
+    // Get all items after the teams header until the next category or end
+    const teams: string[] = []
+    for (let i = teamsIndex + 1; i < results.length; i++) {
+      const item = results[i]
+      // Stop if we hit another category header
+      if (item.id === '#') break
+      // Add team names (items with id starting with /search/r/team/)
+      if (item.id && item.id.startsWith('/search/r/team/') && item.value) {
+        teams.push(item.value)
+      }
+    }
+    
+    // Remove duplicates
+    return Array.from(new Set(teams))
+  }
+
+  const searchTeam2 = async (query: string): Promise<string[]> => {
+    const results = await fetchVLRResults(query)
+    if (!results.length) return []
+    
+    // Find the index of the "teams" category header
+    const teamsIndex = results.findIndex((item: any) => item.value === 'teams' && item.id === '#')
+    if (teamsIndex === -1) return []
+    
+    // Get all items after the teams header until the next category or end
+    const teams: string[] = []
+    for (let i = teamsIndex + 1; i < results.length; i++) {
+      const item = results[i]
+      // Stop if we hit another category header
+      if (item.id === '#') break
+      // Add team names (items with id starting with /search/r/team/)
+      if (item.id && item.id.startsWith('/search/r/team/') && item.value) {
+        teams.push(item.value)
+      }
+    }
+    
+    // Remove duplicates
+    return Array.from(new Set(teams))
+  }
+
+  const searchTournaments = async (query: string): Promise<string[]> => {
+    const results = await fetchVLRResults(query)
+    if (!results.length) return []
+    
+    // Find the index of the "events" category header
+    const eventsIndex = results.findIndex((item: any) => item.value === 'events' && item.id === '#')
+    if (eventsIndex === -1) return []
+    
+    // Get all items after the events header until the next category or end
+    const tournaments: string[] = []
+    for (let i = eventsIndex + 1; i < results.length; i++) {
+      const item = results[i]
+      // Stop if we hit another category header
+      if (item.id === '#') break
+      // Add tournament names (items with id starting with /search/r/event/)
+      if (item.id && item.id.startsWith('/search/r/event/') && item.value) {
+        tournaments.push(item.value)
+      }
+    }
+    
+    // Remove duplicates
+    return Array.from(new Set(tournaments))
+  }
+
+  const searchPlayerName = async (query: string): Promise<string[]> => {
+    const results = await fetchVLRResults(query)
+    if (!results.length) return []
+    
+    // Find the index of the "players" category header
+    const playersIndex = results.findIndex((item: any) => item.value === 'players' && item.id === '#')
+    if (playersIndex === -1) return []
+    
+    // Get all items after the players header until the next category or end
+    const players: string[] = []
+    for (let i = playersIndex + 1; i < results.length; i++) {
+      const item = results[i]
+      // Stop if we hit another category header
+      if (item.id === '#') break
+      // Add player names (items with id starting with /search/r/player/)
+      if (item.id && item.id.startsWith('/search/r/player/') && item.value) {
+        players.push(item.value)
+      }
+    }
+    
+    // Remove duplicates
+    return Array.from(new Set(players))
+  }
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    // Check if at least one field has a value
+    if (team1 || team2 || tournament || playerName) {
       setHasSubmitted(true)
       setIsLoading(true)
+      // Longer delay to show loading, then show scene
       setTimeout(() => {
         setShowScene(true)
         setIsLoading(false)
@@ -78,12 +189,12 @@ export default function Home() {
             )}
           </AnimatePresence>
 
-          <div className="w-full max-w-3xl px-4">
-            <form onSubmit={handleSubmit} className="relative flex items-center gap-2">
+          <div className="w-full max-w-6xl px-4">
+            <form onSubmit={handleSubmit} className="relative flex items-center gap-2 flex-wrap">
               {/* Left button */}
               <button
                 type="button"
-                className="flex items-center justify-center w-10 h-10 rounded-lg bg-gray-200 hover:bg-gray-300 transition-colors"
+                className="flex items-center justify-center w-10 h-10 rounded-lg bg-gray-200 hover:bg-gray-300 transition-colors flex-shrink-0"
                 aria-label="Options"
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -94,21 +205,42 @@ export default function Home() {
                 </svg>
               </button>
 
-              {/* Main input */}
-              <input
-                type="text"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="What would you like to see today?"
-                className="flex-1 h-10 px-4 rounded-lg bg-white border border-gray-300 text-black placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                style={{ color: '#000000' }}
-              />
+              {/* Searchable Selects */}
+              <div className="flex-1 flex items-center gap-2 flex-wrap min-w-0">
+                <SearchableSelect
+                  placeholder="Team 1"
+                  value={team1}
+                  onChange={setTeam1}
+                  onSearch={searchTeam1}
+                  className="flex-1 min-w-[150px]"
+                />
+                <SearchableSelect
+                  placeholder="Team 2"
+                  value={team2}
+                  onChange={setTeam2}
+                  onSearch={searchTeam2}
+                  className="flex-1 min-w-[150px]"
+                />
+                <SearchableSelect
+                  placeholder="Tournament"
+                  value={tournament}
+                  onChange={setTournament}
+                  onSearch={searchTournaments}
+                  className="flex-1 min-w-[150px]"
+                />
+                <SearchableSelect
+                  placeholder="Player Name"
+                  value={playerName}
+                  onChange={setPlayerName}
+                  onSearch={searchPlayerName}
+                  className="flex-1 min-w-[150px]"
+                />
+              </div>
 
               {/* Right buttons */}
               <button
                 type="button"
-                className="flex items-center justify-center w-10 h-10 rounded-lg bg-gray-200 hover:bg-gray-300 transition-colors"
+                className="flex items-center justify-center w-10 h-10 rounded-lg bg-gray-200 hover:bg-gray-300 transition-colors flex-shrink-0"
                 aria-label="Add"
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -118,8 +250,8 @@ export default function Home() {
 
               <button
                 type="submit"
-                disabled={!prompt.trim()}
-                className="flex items-center justify-center w-10 h-10 rounded-lg bg-gray-300 hover:bg-gray-400 disabled:bg-gray-200 disabled:cursor-not-allowed transition-colors"
+                disabled={!team1 && !team2 && !tournament && !playerName}
+                className="flex items-center justify-center w-10 h-10 rounded-lg bg-gray-300 hover:bg-gray-400 disabled:bg-gray-200 disabled:cursor-not-allowed transition-colors flex-shrink-0"
                 aria-label="Submit"
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">

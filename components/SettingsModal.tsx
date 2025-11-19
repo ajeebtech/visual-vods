@@ -79,6 +79,24 @@ export default function SettingsModal({
       console.log('Available buckets:', buckets?.map(b => b.name))
 
       const avatarsBucket = buckets?.find(b => b.name === 'avatars')
+      
+      // If bucket list is empty, the bucket likely doesn't exist
+      if (buckets.length === 0) {
+        setError(
+          'Storage bucket "avatars" not found. The bucket list is empty.\n\n' +
+          'Please create the "avatars" bucket in Supabase:\n\n' +
+          '1. Go to your Supabase Dashboard\n' +
+          '2. Navigate to Storage → Buckets\n' +
+          '3. Click "New bucket"\n' +
+          '4. Name: avatars (exactly, lowercase)\n' +
+          '5. Toggle "Public bucket" ON (important!)\n' +
+          '6. Click "Create bucket"\n\n' +
+          'After creating the bucket, try uploading again.'
+        )
+        setUploading(false)
+        return
+      }
+      
       if (buckets.length > 0 && !avatarsBucket) {
         setError(
           'Storage bucket "avatars" not found. Found buckets: ' + buckets.map(b => b.name).join(', ') + '\n\n' +
@@ -95,8 +113,6 @@ export default function SettingsModal({
 
       if (avatarsBucket) {
         console.log('Avatars bucket found:', avatarsBucket)
-      } else {
-        console.log('Bucket list empty or permission denied - will try upload anyway')
       }
 
       // Create a unique file name - upload directly to bucket root
