@@ -120,7 +120,6 @@ export default function SettingsModal({
       if (uploadError) {
         console.error('Upload error details:', {
           message: uploadError.message,
-          statusCode: uploadError.statusCode,
           error: uploadError
         })
         
@@ -134,8 +133,8 @@ export default function SettingsModal({
           uploadError.message.includes('permission') ||
           uploadError.message.includes('Row Level Security') ||
           uploadError.message.includes('RLS') ||
-          uploadError.statusCode === 403 ||
-          uploadError.statusCode === 401
+          uploadError.message.includes('403') ||
+          uploadError.message.includes('401')
         ) {
           setError(
             'Permission denied (Error: ' + uploadError.message + ')\n\n' +
