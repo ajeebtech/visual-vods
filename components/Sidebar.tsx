@@ -48,6 +48,24 @@ const MessagingIcon = ({ className }: { className?: string }) => (
     </svg>
 )
 
+// Curate Session Icon
+const CurateSessionIcon = ({ className }: { className?: string }) => (
+    <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 256 256"
+        className={className}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="16"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+    >
+        <path d="M224,88V200.89a7.11,7.11,0,0,1-7.11,7.11H40a8,8,0,0,1-8-8V64a8,8,0,0,1,8-8H93.33a8,8,0,0,1,4.8,1.6L128,80h88A8,8,0,0,1,224,88Z" />
+        <line x1="104" y1="144" x2="152" y2="144" />
+        <line x1="128" y1="120" x2="128" y2="168" />
+    </svg>
+)
+
 export default function Sidebar() {
     const [isExpanded, setIsExpanded] = useState(false)
     const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -239,64 +257,6 @@ export default function Sidebar() {
 
             {/* Navigation Items */}
             <div className="flex-1 flex flex-col gap-8 px-6 mt-8">
-                {/* Spiral Icon / Toggle */}
-                <Tooltip
-                    content="Spirals"
-                    placement="right"
-                    classNames={{
-                        content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
-                    }}
-                >
-                    <button
-                        className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors group"
-                    >
-                        <SpiralIcon className="w-6 h-6 flex-shrink-0" />
-                        <AnimatePresence>
-                            {isExpanded && (
-                                <motion.span
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    className="whitespace-nowrap font-medium"
-                                >
-                                    Spirals
-                                </motion.span>
-                            )}
-                        </AnimatePresence>
-                    </button>
-                </Tooltip>
-
-                {/* Library Icon */}
-                <Tooltip
-                    content="Library"
-                    placement="right"
-                    classNames={{
-                        content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
-                    }}
-                >
-                    <button className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors">
-                        <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
-                            <div className="flex gap-1">
-                                <div className="w-0.5 h-4 bg-current rounded-full" />
-                                <div className="w-0.5 h-4 bg-current rounded-full" />
-                                <div className="w-0.5 h-4 bg-current rounded-full" />
-                            </div>
-                        </div>
-                        <AnimatePresence>
-                            {isExpanded && (
-                                <motion.span
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    className="whitespace-nowrap font-medium"
-                                >
-                                    Library
-                                </motion.span>
-                            )}
-                        </AnimatePresence>
-                    </button>
-                </Tooltip>
-
                 {/* History Icon */}
                 <Tooltip
                     content="Spiral history"
@@ -346,6 +306,33 @@ export default function Sidebar() {
                                     className="whitespace-nowrap font-medium"
                                 >
                                     Messages
+                                </motion.span>
+                            )}
+                        </AnimatePresence>
+                    </button>
+                </Tooltip>
+
+                {/* Curate Session Icon */}
+                <Tooltip
+                    content="Curate a session"
+                    placement="right"
+                    classNames={{
+                        content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
+                    }}
+                >
+                    <button className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors">
+                        <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
+                            <CurateSessionIcon className="w-6 h-6" />
+                        </div>
+                        <AnimatePresence>
+                            {isExpanded && (
+                                <motion.span
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="whitespace-nowrap font-medium"
+                                >
+                                    Curate a session
                                 </motion.span>
                             )}
                         </AnimatePresence>

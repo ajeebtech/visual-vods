@@ -8,8 +8,8 @@ import { ChevronDown, Check } from 'lucide-react'
 interface SearchableSelectProps {
   placeholder: string
   value: string
-  onChange: (value: string) => void
-  onSearch: (query: string) => Promise<string[]> | string[]
+  onChange: (value: string, id?: string) => void
+  onSearch: (query: string) => Promise<string[] | Array<{ name: string; id: string }>> | string[] | Array<{ name: string; id: string }>
   className?: string
   disabled?: boolean
 }
@@ -24,7 +24,7 @@ export default function SearchableSelect({
 }: SearchableSelectProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  const [options, setOptions] = useState<string[]>([])
+  const [options, setOptions] = useState<string[] | Array<{ name: string; id: string }>>([])
   const [isLoading, setIsLoading] = useState(false)
   const [highlightedIndex, setHighlightedIndex] = useState(-1)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -90,11 +90,25 @@ export default function SearchableSelect({
     }
   }, [isOpen])
 
-  const handleSelect = (option: string) => {
-    onChange(option)
+  const handleSelect = (option: string | { name: string; id: string }) => {
+    if (typeof option === 'string') {
+      onChange(option)
+    } else {
+      onChange(option.name, option.id)
+    }
     setIsOpen(false)
     setSearchQuery('')
     setHighlightedIndex(-1)
+  }
+  
+  // Helper to get display value from option
+  const getOptionValue = (option: string | { name: string; id: string }): string => {
+    return typeof option === 'string' ? option : option.name
+  }
+  
+  // Helper to get option for highlighting
+  const getOption = (index: number): string | { name: string; id: string } | undefined => {
+    return options[index]
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -111,7 +125,8 @@ export default function SearchableSelect({
       setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : -1))
     } else if (e.key === 'Enter' && highlightedIndex >= 0) {
       e.preventDefault()
-      handleSelect(options[highlightedIndex])
+      const option = getOption(highlightedIndex)
+      if (option) handleSelect(option)
     } else if (e.key === 'Escape') {
       setIsOpen(false)
       setSearchQuery('')
@@ -173,24 +188,28 @@ export default function SearchableSelect({
                 No results found
               </div>
             ) : (
-              options.map((option, index) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => handleSelect(option)}
-                  className={cn(
-                    'w-full text-left px-2 py-1.5 text-sm rounded-sm hover:bg-gray-100 focus:bg-gray-100 focus:outline-none flex items-center justify-between text-gray-900',
-                    index === highlightedIndex && 'bg-gray-100',
-                    value === option && 'font-medium'
-                  )}
-                  onMouseEnter={() => setHighlightedIndex(index)}
-                >
-                  <span className="text-gray-900">{option}</span>
-                  {value === option && (
-                    <Check className="h-4 w-4 text-gray-600" />
-                  )}
-                </button>
-              ))
+              options.map((option, index) => {
+                const optionValue = getOptionValue(option)
+                const optionKey = typeof option === 'string' ? option : `${option.id}-${option.name}`
+                return (
+                  <button
+                    key={optionKey}
+                    type="button"
+                    onClick={() => handleSelect(option)}
+                    className={cn(
+                      'w-full text-left px-2 py-1.5 text-sm rounded-sm hover:bg-gray-100 focus:bg-gray-100 focus:outline-none flex items-center justify-between text-gray-900',
+                      index === highlightedIndex && 'bg-gray-100',
+                      value === optionValue && 'font-medium'
+                    )}
+                    onMouseEnter={() => setHighlightedIndex(index)}
+                  >
+                    <span className="text-gray-900">{optionValue}</span>
+                    {value === optionValue && (
+                      <Check className="h-4 w-4 text-gray-600" />
+                    )}
+                  </button>
+                )
+              })
             )}
           </div>
         </div>

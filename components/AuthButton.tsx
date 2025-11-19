@@ -5,6 +5,17 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/router'
 import LoginModal from './LoginModal'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 
 // Sign In Icon (globe/network icon)
 const SignInIcon = ({ className }: { className?: string }) => (
@@ -185,29 +196,46 @@ export default function AuthButton({ isSidebarExpanded = false }: AuthButtonProp
 
   if (user) {
     return (
-      <button
-        onClick={handleLogout}
-        className={`w-full flex items-center ${isSidebarExpanded ? 'gap-4' : 'justify-center'} text-gray-500 hover:text-black transition-colors`}
-      >
-        <LogoutIcon className="w-6 h-6 flex-shrink-0" />
-        <AnimatePresence>
-          {isSidebarExpanded && (
-            <motion.span
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ 
-                type: 'spring', 
-                stiffness: 300, 
-                damping: 30
-              }}
-              className="text-sm font-medium whitespace-nowrap"
-            >
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <button
+            className={`w-full flex items-center ${isSidebarExpanded ? 'gap-4' : 'justify-center'} text-gray-500 hover:text-black transition-colors`}
+          >
+            <LogoutIcon className="w-6 h-6 flex-shrink-0" />
+            <AnimatePresence>
+              {isSidebarExpanded && (
+                <motion.span
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ 
+                    type: 'spring', 
+                    stiffness: 300, 
+                    damping: 30
+                  }}
+                  className="text-sm font-medium whitespace-nowrap"
+                >
+                  Sign Out
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure you want to sign out?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You will need to sign in again to access your account.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleLogout} className="bg-red-500 text-white hover:bg-red-600">
               Sign Out
-            </motion.span>
-          )}
-        </AnimatePresence>
-      </button>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     )
   }
 

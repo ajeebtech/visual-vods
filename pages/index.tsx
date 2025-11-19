@@ -11,6 +11,7 @@ const Scene = dynamic(() => import('../components/Scene'), {
 })
 //i
 import Sidebar from '@/components/Sidebar'
+import MatchScene3D from '@/components/MatchScene3D'
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false)
@@ -22,17 +23,26 @@ export default function Home() {
   const [team2, setTeam2] = useState('')
   const [tournament, setTournament] = useState('')
   const [playerName, setPlayerName] = useState('')
+  
+  // Store team IDs for fetching matches
+  const [team1Id, setTeam1Id] = useState<string | null>(null)
+  const [team2Id, setTeam2Id] = useState<string | null>(null)
+  
+  // Store matches data
+  const [matchesData, setMatchesData] = useState<any>(null)
 
   // Clear player name when team1 or team2 is set
-  const handleTeam1Change = (value: string) => {
+  const handleTeam1Change = (value: string, teamId?: string) => {
     setTeam1(value)
+    setTeam1Id(teamId || null)
     if (value) {
       setPlayerName('') // Clear player name when team is selected
     }
   }
 
-  const handleTeam2Change = (value: string) => {
+  const handleTeam2Change = (value: string, teamId?: string) => {
     setTeam2(value)
+    setTeam2Id(teamId || null)
     if (value) {
       setPlayerName('') // Clear player name when team is selected
     }
@@ -56,32 +66,14 @@ export default function Home() {
     }
   }
 
-  // Search functions using VLR.gg API
-  const searchTeam1 = async (query: string): Promise<string[]> => {
-    const results = await fetchVLRResults(query)
-    if (!results.length) return []
-    
-    // Find the index of the "teams" category header
-    const teamsIndex = results.findIndex((item: any) => item.value === 'teams' && item.id === '#')
-    if (teamsIndex === -1) return []
-    
-    // Get all items after the teams header until the next category or end
-    const teams: string[] = []
-    for (let i = teamsIndex + 1; i < results.length; i++) {
-      const item = results[i]
-      // Stop if we hit another category header
-      if (item.id === '#') break
-      // Add team names (items with id starting with /search/r/team/)
-      if (item.id && item.id.startsWith('/search/r/team/') && item.value) {
-        teams.push(item.value)
-      }
-    }
-    
-    // Remove duplicates
-    return Array.from(new Set(teams))
+  // Extract team ID from search result path (e.g., /search/r/team/2593/ac -> 2593)
+  const extractTeamId = (path: string): string | null => {
+    const match = path.match(/\/search\/r\/team\/(\d+)\//)
+    return match ? match[1] : null
   }
 
-  const searchTeam2 = async (query: string): Promise<string[]> => {
+  // Search functions using VLR.gg API - now returns objects with name and id
+  const searchTeam1 = async (query: string): Promise<Array<{ name: string; id: string }>> => {
     const results = await fetchVLRResults(query)
     if (!results.length) return []
     
@@ -90,19 +82,53 @@ export default function Home() {
     if (teamsIndex === -1) return []
     
     // Get all items after the teams header until the next category or end
-    const teams: string[] = []
+    const teams: Array<{ name: string; id: string }> = []
+    const seenNames = new Set<string>()
+    
     for (let i = teamsIndex + 1; i < results.length; i++) {
       const item = results[i]
       // Stop if we hit another category header
       if (item.id === '#') break
       // Add team names (items with id starting with /search/r/team/)
       if (item.id && item.id.startsWith('/search/r/team/') && item.value) {
-        teams.push(item.value)
+        const teamId = extractTeamId(item.id)
+        if (teamId && !seenNames.has(item.value)) {
+          teams.push({ name: item.value, id: teamId })
+          seenNames.add(item.value)
+        }
       }
     }
     
-    // Remove duplicates
-    return Array.from(new Set(teams))
+    return teams
+  }
+
+  const searchTeam2 = async (query: string): Promise<Array<{ name: string; id: string }>> => {
+    const results = await fetchVLRResults(query)
+    if (!results.length) return []
+    
+    // Find the index of the "teams" category header
+    const teamsIndex = results.findIndex((item: any) => item.value === 'teams' && item.id === '#')
+    if (teamsIndex === -1) return []
+    
+    // Get all items after the teams header until the next category or end
+    const teams: Array<{ name: string; id: string }> = []
+    const seenNames = new Set<string>()
+    
+    for (let i = teamsIndex + 1; i < results.length; i++) {
+      const item = results[i]
+      // Stop if we hit another category header
+      if (item.id === '#') break
+      // Add team names (items with id starting with /search/r/team/)
+      if (item.id && item.id.startsWith('/search/r/team/') && item.value) {
+        const teamId = extractTeamId(item.id)
+        if (teamId && !seenNames.has(item.value)) {
+          teams.push({ name: item.value, id: teamId })
+          seenNames.add(item.value)
+        }
+      }
+    }
+    
+    return teams
   }
 
   const searchTournaments = async (query: string): Promise<string[]> => {
@@ -153,12 +179,39 @@ export default function Home() {
     return Array.from(new Set(players))
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     // Check if at least one field has a value
     if (team1 || team2 || tournament || playerName) {
       setHasSubmitted(true)
       setIsLoading(true)
+      
+      // If team1 is selected, fetch team matches
+      if (team1 && team1Id) {
+        try {
+          const response = await fetch(`/api/vlr-team-matches?teamId=${team1Id}&teamName=${encodeURIComponent(team1)}`)
+          if (response.ok) {
+            const data = await response.json()
+            console.log('Team matches data:', data)
+            setMatchesData(data)
+            
+            // Log summary
+            console.log(`Found ${data.totalMatches} total matches`)
+            console.log(`Fetched ${data.fetchedMatches} matches`)
+            console.log(`${data.matchesWithVODs} matches have VOD links`)
+            
+            // Log matches with VODs
+            data.matches.forEach((match: any) => {
+              if (match.hasVODs) {
+                console.log(`Match ${match.matchId}:`, match.vodLinks)
+              }
+            })
+          }
+        } catch (error) {
+          console.error('Error fetching team matches:', error)
+        }
+      }
+      
       // Longer delay to show loading, then show scene
       setTimeout(() => {
         setShowScene(true)
@@ -246,14 +299,14 @@ export default function Home() {
                 </AnimatePresence>
                 
                 <SearchableSelect
-                  placeholder="Team 2"
+                  placeholder="Team 2 (optional)"
                   value={team2}
                   onChange={handleTeam2Change}
                   onSearch={searchTeam2}
                   className="flex-1 min-w-[150px]"
                 />
                 <SearchableSelect
-                  placeholder="Tournament"
+                  placeholder="Tournament (optional)"
                   value={tournament}
                   onChange={setTournament}
                   onSearch={searchTournaments}
@@ -320,6 +373,11 @@ export default function Home() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Match Scene 3D - shows when matches are loaded */}
+        {matchesData && matchesData.matches && matchesData.matches.length > 0 && (
+          <MatchScene3D matches={matchesData.matches} />
+        )}
 
         {/* Scene - shows when ready */}
         {showScene && (

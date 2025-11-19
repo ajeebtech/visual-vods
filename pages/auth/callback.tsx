@@ -12,10 +12,33 @@ export default function AuthCallback() {
 
     const handleAuthCallback = async () => {
       try {
-        setStatus('Checking session...')
+        setStatus('Processing authentication...')
+        
+        // Check if we have hash fragments (OAuth callback)
+        const hash = window.location.hash
+        if (hash) {
+          console.log('OAuth callback detected with hash fragments')
+          
+          // Parse hash fragments manually if needed
+          const hashParams = new URLSearchParams(hash.substring(1))
+          const accessToken = hashParams.get('access_token')
+          const errorParam = hashParams.get('error')
+          
+          if (errorParam) {
+            console.error('OAuth error in hash:', errorParam)
+            setStatus('Authentication failed. Redirecting...')
+            setTimeout(() => router.replace('/?error=auth_failed'), 2000)
+            return
+          }
+          
+          if (accessToken) {
+            // We have an access token, let Supabase handle it
+            console.log('Access token found in hash, processing...')
+          }
+        }
         
         // Wait a moment for Supabase to process the hash
-        await new Promise(resolve => setTimeout(resolve, 100))
+        await new Promise(resolve => setTimeout(resolve, 300))
         
         // Get the session - Supabase automatically handles the hash fragments
         const { data: { session }, error } = await supabase.auth.getSession()
@@ -29,7 +52,10 @@ export default function AuthCallback() {
 
         if (session) {
           // Successfully authenticated
+          console.log('Session established successfully')
           setStatus('Authentication successful! Redirecting...')
+          // Clear the hash from URL
+          window.history.replaceState(null, '', window.location.pathname)
           // Use replace instead of push to avoid adding to history
           setTimeout(() => router.replace('/'), 1000)
         } else {
@@ -44,7 +70,8 @@ export default function AuthCallback() {
             return
           }
 
-          // No session found, redirect anyway
+          // No session found, try to get it from the URL hash
+          console.warn('No session found, checking hash fragments...')
           setStatus('No session found. Redirecting...')
           setTimeout(() => router.replace('/'), 1000)
         }
