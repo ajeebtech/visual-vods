@@ -232,11 +232,11 @@ export default function Home() {
 
         {/* Search bar - centered initially, moves to bottom after submission */}
         <motion.div
-          initial={{ top: '50%', bottom: 'auto', transform: 'translateY(-50%)' }}
+          initial={{ top: '50%', bottom: 'auto', y: '-50%' }}
           animate={
             hasSubmitted
-              ? { top: 'auto', bottom: '0', transform: 'translateY(0)' }
-              : { top: '50%', bottom: 'auto', transform: 'translateY(-50%)' }
+              ? { top: 'auto', bottom: '0', y: '0%' }
+              : { top: '50%', bottom: 'auto', y: '-50%' }
           }
           transition={{ type: 'spring', stiffness: 300, damping: 30 }}
           className="fixed left-0 right-0 flex flex-col items-center justify-center z-50 pl-20"

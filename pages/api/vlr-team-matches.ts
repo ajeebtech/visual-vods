@@ -58,50 +58,85 @@ export default async function handler(
     // Extract match links - looking for <a> tags with href containing match IDs
     // Based on the pattern: /585458/fnatic-vs-g2-esports-red-bull-home-ground-2025-lr3
     const matchLinks: MatchLink[] = []
+    const seenHrefs = new Set<string>()
     
-    // Find all match links - they typically have classes like 'wf-card', 'm-item', etc.
-    $('a[href*="/"][href*="-vs-"]').each((_, element) => {
+    // Try multiple selectors to find match links
+    // Pattern 1: Links with match ID pattern (number at start of path)
+    $('a[href]').each((_, element) => {
       const href = $(element).attr('href')
-      if (href && href.startsWith('/') && href.includes('-vs-')) {
-        // Extract match ID from href (first number in the path)
-        const matchIdMatch = href.match(/^\/(\d+)\//)
-        const matchId = matchIdMatch ? matchIdMatch[1] : undefined
-        
+      if (!href) return
+      
+      // Match pattern: /123456/team-vs-team-tournament
+      const matchIdPattern = /^\/(\d+)\/[^\/]+/
+      const match = href.match(matchIdPattern)
+      
+      if (match && !seenHrefs.has(href)) {
+        const matchId = match[1]
         const fullUrl = href.startsWith('http') ? href : `https://www.vlr.gg${href}`
         
-        // Avoid duplicates
-        if (!matchLinks.find(link => link.href === href)) {
+        matchLinks.push({
+          href,
+          fullUrl,
+          matchId
+        })
+        seenHrefs.add(href)
+      }
+    })
+    
+    // Pattern 2: Links with specific classes that are match cards
+    if (matchLinks.length === 0) {
+      $('a.wf-card, a.m-item, a[class*="match"], a[class*="wf"]').each((_, element) => {
+        const href = $(element).attr('href')
+        if (!href || !href.startsWith('/') || href.includes('#') || seenHrefs.has(href)) return
+        
+        // Check if it looks like a match URL
+        if (href.match(/^\/(\d+)\//) || href.includes('-vs-')) {
+          const matchIdMatch = href.match(/^\/(\d+)\//)
+          const matchId = matchIdMatch ? matchIdMatch[1] : undefined
+          const fullUrl = href.startsWith('http') ? href : `https://www.vlr.gg${href}`
+          
           matchLinks.push({
             href,
             fullUrl,
             matchId
           })
-        }
-      }
-    })
-    
-    // Also try alternative selectors if the above doesn't work
-    if (matchLinks.length === 0) {
-      $('a.wf-card, a.m-item').each((_, element) => {
-        const href = $(element).attr('href')
-        if (href && href.startsWith('/') && !href.includes('#')) {
-          const matchIdMatch = href.match(/^\/(\d+)\//)
-          const matchId = matchIdMatch ? matchIdMatch[1] : undefined
-          
-          const fullUrl = href.startsWith('http') ? href : `https://www.vlr.gg${href}`
-          
-          if (!matchLinks.find(link => link.href === href)) {
-            matchLinks.push({
-              href,
-              fullUrl,
-              matchId
-            })
-          }
+          seenHrefs.add(href)
         }
       })
     }
     
-    console.log(`Found ${matchLinks.length} match links`)
+    // Pattern 3: Look in specific containers that hold matches
+    if (matchLinks.length === 0) {
+      $('.mod-dark a, .m-item a, [class*="match"] a').each((_, element) => {
+        const href = $(element).attr('href')
+        if (!href || !href.startsWith('/') || seenHrefs.has(href)) return
+        
+        const matchIdMatch = href.match(/^\/(\d+)\//)
+        if (matchIdMatch) {
+          const matchId = matchIdMatch[1]
+          const fullUrl = href.startsWith('http') ? href : `https://www.vlr.gg${href}`
+          
+          matchLinks.push({
+            href,
+            fullUrl,
+            matchId
+          })
+          seenHrefs.add(href)
+        }
+      })
+    }
+    
+    console.log(`Found ${matchLinks.length} match links using selectors`)
+    
+    // Log first few match links for debugging
+    if (matchLinks.length > 0) {
+      console.log('Sample match links:', matchLinks.slice(0, 3).map(l => ({ href: l.href, matchId: l.matchId })))
+    } else {
+      console.log('No match links found. HTML length:', html.length)
+      // Log a sample of the HTML to debug
+      const sampleHtml = html.substring(0, 2000)
+      console.log('HTML sample:', sampleHtml)
+    }
     
     // Helper function to extract VOD links from match HTML
     const extractVODLinks = (html: string): Array<{ url: string; platform: 'youtube' | 'twitch' | 'other'; embedUrl?: string }> => {
