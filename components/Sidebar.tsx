@@ -58,6 +58,7 @@ export default function Sidebar() {
     // Debug: Log when avatarUrl changes
     useEffect(() => {
         console.log('🔄 avatarUrl state changed:', avatarUrl)
+        console.log('🎨 Rendering profile button - avatarUrl:', avatarUrl, 'type:', typeof avatarUrl, 'isTruthy:', !!avatarUrl)
     }, [avatarUrl])
 
     // Fetch user profile data
@@ -421,12 +422,6 @@ export default function Sidebar() {
                     }}
                 >
                     <button className="flex items-center gap-4">
-                        {/* Debug: Show current state */}
-                        {process.env.NODE_ENV === 'development' && (
-                            <div style={{ display: 'none' }}>
-                                {console.log('🎨 Rendering profile button - avatarUrl:', avatarUrl, 'type:', typeof avatarUrl, 'isTruthy:', !!avatarUrl)}
-                            </div>
-                        )}
                         <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 flex-shrink-0 border-2 border-gray-300 relative">
                             {avatarUrl ? (
                                 <img
