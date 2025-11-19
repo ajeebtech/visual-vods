@@ -15,10 +15,12 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false)
   const [showScene, setShowScene] = useState(false)
   const [prompt, setPrompt] = useState('')
+  const [hasSubmitted, setHasSubmitted] = useState(false)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (prompt.trim()) {
+      setHasSubmitted(true)
       setIsLoading(true)
       // Longer delay to show loading, then show scene
       setTimeout(() => {
@@ -30,6 +32,7 @@ export default function Home() {
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && prompt.trim()) {
+      setHasSubmitted(true)
       setIsLoading(true)
       setTimeout(() => {
         setShowScene(true)
@@ -48,8 +51,33 @@ export default function Home() {
       <main className="relative w-full h-screen overflow-hidden bg-gray-100">
         <Sidebar />
 
-        {/* Search bar - always visible at bottom */}
-        <div className="fixed bottom-0 left-0 right-0 flex items-end justify-center pb-8 z-50 pl-20">
+        {/* Search bar - centered initially, moves to bottom after submission */}
+        <motion.div
+          initial={{ top: '50%', bottom: 'auto', transform: 'translateY(-50%)' }}
+          animate={
+            hasSubmitted
+              ? { top: 'auto', bottom: '0', transform: 'translateY(0)' }
+              : { top: '50%', bottom: 'auto', transform: 'translateY(-50%)' }
+          }
+          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          className="fixed left-0 right-0 flex flex-col items-center justify-center z-50 pl-20"
+          style={{ paddingBottom: hasSubmitted ? '2rem' : '0' }}
+        >
+          {/* Heading - only visible before submission */}
+          <AnimatePresence>
+            {!hasSubmitted && (
+              <motion.h1
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.5 }}
+                className="text-4xl md:text-5xl font-bold text-black mb-8 text-center"
+              >
+                What would you like to analyze today?
+              </motion.h1>
+            )}
+          </AnimatePresence>
+
           <div className="w-full max-w-3xl px-4">
             <form onSubmit={handleSubmit} className="relative flex items-center gap-2">
               {/* Left button */}
@@ -72,7 +100,7 @@ export default function Home() {
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="What do you want to see?"
+                placeholder="What would you like to see today?"
                 className="flex-1 h-10 px-4 rounded-lg bg-white border border-gray-300 text-black placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 style={{ color: '#000000' }}
               />
@@ -100,7 +128,7 @@ export default function Home() {
               </button>
             </form>
           </div>
-        </div>
+        </motion.div>
 
         {/* Loading state */}
         <AnimatePresence>

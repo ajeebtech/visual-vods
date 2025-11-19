@@ -18,6 +18,8 @@
     "@react-three/drei": "^9.88.0",
     "@react-three/fiber": "^8.15.0",
     "@react-three/postprocessing": "^2.15.0",
+    "@supabase/ssr": "^0.7.0",
+    "@supabase/supabase-js": "^2.83.0",
     "@use-gesture/react": "^10.3.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

@@ -8,8 +8,12 @@ import {
     AlignLeft,
     ChevronDown,
     Library,
-    Disc // Using Disc as a placeholder for the spiral icon if needed, or custom SVG
+    Disc, // Using Disc as a placeholder for the spiral icon if needed, or custom SVG
+    User
 } from 'lucide-react'
+import SettingsModal from './SettingsModal'
+import AuthButton from './AuthButton'
+import { supabase } from '@/lib/supabase'
 
 // Custom Spiral Icon since Lucide might not have an exact match
 const SpiralIcon = ({ className }: { className?: string }) => (
@@ -28,9 +32,105 @@ const SpiralIcon = ({ className }: { className?: string }) => (
     </svg>
 )
 
+// Messaging Icon
+const MessagingIcon = ({ className }: { className?: string }) => (
+    <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        width="24"
+        height="24"
+        color="currentColor"
+        fill="none"
+        className={className}
+    >
+        <path d="M8.5 14.5H15.5M8.5 9.5H12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"></path>
+        <path d="M14.1706 20.8905C18.3536 20.6125 21.6856 17.2332 21.9598 12.9909C22.0134 12.1607 22.0134 11.3009 21.9598 10.4707C21.6856 6.22838 18.3536 2.84913 14.1706 2.57107C12.7435 2.47621 11.2536 2.47641 9.8294 2.57107C5.64639 2.84913 2.31441 6.22838 2.04024 10.4707C1.98659 11.3009 1.98659 12.1607 2.04024 12.9909C2.1401 14.536 2.82343 15.9666 3.62791 17.1746C4.09501 18.0203 3.78674 19.0758 3.30021 19.9978C2.94941 20.6626 2.77401 20.995 2.91484 21.2351C3.05568 21.4752 3.37026 21.4829 3.99943 21.4982C5.24367 21.5285 6.08268 21.1757 6.74868 20.6846C7.1264 20.4061 7.31527 20.2668 7.44544 20.2508C7.5756 20.2348 7.83177 20.3403 8.34401 20.5513C8.8044 20.7409 9.33896 20.8579 9.8294 20.8905C11.2536 20.9852 12.7435 20.9854 14.1706 20.8905Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"></path>
+    </svg>
+)
+
 export default function Sidebar() {
     const [isExpanded, setIsExpanded] = useState(false)
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+    const [username, setUsername] = useState<string>('User Name')
+    const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
     const sidebarRef = useRef<HTMLDivElement>(null)
+
+    // Fetch user profile data
+    useEffect(() => {
+        const fetchUserProfile = async () => {
+            try {
+                const { data: { user } } = await supabase.auth.getUser()
+                if (user) {
+                    // First, try to fetch from profiles table (highest priority - user's saved custom username)
+                    let savedUsername: string | null = null
+                    let savedAvatar: string | null = null
+                    
+                    try {
+                        const { data: profileData, error: profileError } = await supabase
+                            .from('profiles')
+                            .select('username, avatar_url')
+                            .eq('id', user.id)
+                            .single()
+
+                        if (!profileError && profileData) {
+                            if (profileData.username) savedUsername = profileData.username
+                            if (profileData.avatar_url) savedAvatar = profileData.avatar_url
+                        }
+                    } catch (err) {
+                        // Profiles table doesn't exist or has RLS issues - that's okay
+                        console.log('Profiles table not available, using user metadata only')
+                    }
+
+                    // Priority order for username:
+                    // 1. Saved username from profiles table
+                    // 2. Saved display_name from user_metadata (user's custom name)
+                    // 3. Saved username from user_metadata
+                    // 4. Google OAuth full_name (fallback)
+                    // 5. Email username (fallback)
+                    const displayName = savedUsername || 
+                                      user.user_metadata?.display_name || 
+                                      user.user_metadata?.username || 
+                                      user.user_metadata?.full_name || 
+                                      user.email?.split('@')[0] || 
+                                      'User Name'
+                    
+                    // Priority order for avatar:
+                    // 1. Saved avatar from profiles table
+                    // 2. Saved avatar_url from user_metadata (user's custom avatar)
+                    // 3. Google OAuth picture (fallback)
+                    const avatar = savedAvatar || 
+                                 user.user_metadata?.avatar_url || 
+                                 user.user_metadata?.picture || 
+                                 null
+                    
+                    setUsername(displayName)
+                    setAvatarUrl(avatar)
+                } else {
+                    // No user, reset to defaults
+                    setUsername('User Name')
+                    setAvatarUrl(null)
+                }
+            } catch (error) {
+                console.error('Error fetching user profile:', error)
+            }
+        }
+
+        fetchUserProfile()
+
+        // Listen for auth state changes
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            if (session?.user) {
+                fetchUserProfile()
+            } else {
+                setUsername('User Name')
+                setAvatarUrl(null)
+            }
+        })
+
+        return () => {
+            subscription.unsubscribe()
+        }
+    }, [])
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -48,13 +148,41 @@ export default function Sidebar() {
         }
     }, [isExpanded])
 
+    const handleSettingsUpdate = async () => {
+        // Refresh profile data after settings update
+        try {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (user) {
+                const displayName = user.user_metadata?.display_name || user.user_metadata?.username || user.email?.split('@')[0] || 'User Name'
+                const avatar = user.user_metadata?.avatar_url || null
+                
+                setUsername(displayName)
+                setAvatarUrl(avatar)
+
+                // Also try to fetch from profiles table
+                const { data: profileData } = await supabase
+                    .from('profiles')
+                    .select('username, avatar_url')
+                    .eq('id', user.id)
+                    .single()
+
+                if (profileData) {
+                    if (profileData.username) setUsername(profileData.username)
+                    if (profileData.avatar_url) setAvatarUrl(profileData.avatar_url)
+                }
+            }
+        } catch (error) {
+            console.error('Error refreshing profile:', error)
+        }
+    }
+
     return (
         <motion.div
             ref={sidebarRef}
             initial={{ width: '80px' }}
             animate={{ width: isExpanded ? '400px' : '80px' }}
             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className="fixed left-0 top-0 h-full bg-white/80 backdrop-blur-xl border-r border-gray-200 z-50 flex flex-col overflow-hidden"
+            className="fixed left-0 top-0 h-full bg-white/80 backdrop-blur-xl border-r border-gray-200 z-[100] flex flex-col overflow-hidden"
         >
             {/* Top Logo Area */}
             <div className="p-6 flex items-center gap-4">
@@ -161,6 +289,33 @@ export default function Sidebar() {
                     </button>
                 </Tooltip>
 
+                {/* Messaging Icon */}
+                <Tooltip
+                    content="Messages"
+                    placement="right"
+                    classNames={{
+                        content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
+                    }}
+                >
+                    <button className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors">
+                        <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
+                            <MessagingIcon className="w-6 h-6" />
+                        </div>
+                        <AnimatePresence>
+                            {isExpanded && (
+                                <motion.span
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="whitespace-nowrap font-medium"
+                                >
+                                    Messages
+                                </motion.span>
+                            )}
+                        </AnimatePresence>
+                    </button>
+                </Tooltip>
+
                 {/* Expanded Content Area */}
                 <AnimatePresence>
                     {isExpanded && (
@@ -203,7 +358,10 @@ export default function Sidebar() {
                         content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
                     }}
                 >
-                    <button className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors">
+                    <button 
+                        onClick={() => setIsSettingsOpen(true)}
+                        className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors"
+                    >
                         <Settings className="w-6 h-6 flex-shrink-0" />
                         <AnimatePresence>
                             {isExpanded && (
@@ -228,12 +386,23 @@ export default function Sidebar() {
                     }}
                 >
                     <button className="flex items-center gap-4">
-                        <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 flex-shrink-0">
-                            <img
-                                src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix"
-                                alt="Profile"
-                                className="w-full h-full object-cover"
-                            />
+                        <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 flex-shrink-0 border-2 border-gray-300">
+                            {avatarUrl ? (
+                                <img
+                                    src={avatarUrl}
+                                    alt="Profile"
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                        // Fallback to default avatar if image fails to load
+                                        const target = e.target as HTMLImageElement
+                                        target.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`
+                                    }}
+                                />
+                            ) : (
+                                <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                                    <User className="w-5 h-5 text-gray-400" />
+                                </div>
+                            )}
                         </div>
                         <AnimatePresence>
                             {isExpanded && (
@@ -243,14 +412,28 @@ export default function Sidebar() {
                                     exit={{ opacity: 0 }}
                                     className="text-left"
                                 >
-                                    <div className="text-sm font-medium text-black">User Name</div>
+                                    <div className="text-sm font-medium text-black">{username}</div>
                                     <div className="text-xs text-gray-500">View Profile</div>
                                 </motion.div>
                             )}
                         </AnimatePresence>
                     </button>
                 </Tooltip>
+
+                {/* Auth Button */}
+                <div className="pt-4 border-t border-gray-200">
+                    <AuthButton />
+                </div>
             </div>
+
+            {/* Settings Modal - rendered via portal at body level */}
+            <SettingsModal
+                isOpen={isSettingsOpen}
+                onClose={() => setIsSettingsOpen(false)}
+                currentUsername={username}
+                currentAvatarUrl={avatarUrl || undefined}
+                onUpdate={handleSettingsUpdate}
+            />
         </motion.div>
     )
 }
