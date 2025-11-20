@@ -13,7 +13,8 @@ import {
 } from 'lucide-react'
 import SettingsModal from './SettingsModal'
 import AuthButton from './AuthButton'
-import { supabase } from '@/lib/supabase'
+import { useSupabase } from '@/lib/supabase-client'
+import { useUser, useSession } from '@clerk/nextjs'
 
 // Custom Spiral Icon since Lucide might not have an exact match
 const SpiralIcon = ({ className }: { className?: string }) => (
@@ -66,11 +67,30 @@ const CurateSessionIcon = ({ className }: { className?: string }) => (
     </svg>
 )
 
-export default function Sidebar() {
+interface Session {
+    id: string
+    title: string
+    team1_name: string | null
+    team2_name: string | null
+    tournament: string | null
+    player_name: string | null
+    matches_data: any
+    created_at: string
+}
+
+interface SidebarProps {
+    onLoadSession?: (session: Session) => void
+}
+
+export default function Sidebar({ onLoadSession }: SidebarProps) {
     const [isExpanded, setIsExpanded] = useState(false)
     const [isSettingsOpen, setIsSettingsOpen] = useState(false)
     const [username, setUsername] = useState<string>('User Name')
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+    const [avatarKey, setAvatarKey] = useState<number>(0) // Force re-render when avatar changes
+    const [sessions, setSessions] = useState<Session[]>([])
+    const [isLoadingSessions, setIsLoadingSessions] = useState(false)
+    const [showHistory, setShowHistory] = useState(false)
     const sidebarRef = useRef<HTMLDivElement>(null)
 
     // Debug: Log when avatarUrl changes
@@ -79,130 +99,147 @@ export default function Sidebar() {
         console.log('🎨 Rendering profile button - avatarUrl:', avatarUrl, 'type:', typeof avatarUrl, 'isTruthy:', !!avatarUrl)
     }, [avatarUrl])
 
+    const { supabase } = useSupabase()
+    const { user: clerkUser } = useUser()
+    const { session: clerkSession } = useSession()
+
     // Fetch user profile data
     const fetchUserProfile = async () => {
+        if (!clerkUser) return
+        
         try {
             console.log('📥 Fetching user profile...')
-            const { data: { user } } = await supabase.auth.getUser()
-            console.log('User fetched:', { id: user?.id, metadata: user?.user_metadata })
+            console.log('Clerk user:', { id: clerkUser.id, email: clerkUser.emailAddresses[0]?.emailAddress })
             
-            if (user) {
-                // First, try to fetch from profiles table (highest priority - user's saved custom username)
-                let savedUsername: string | null = null
-                let savedAvatar: string | null = null
-                
+            // First, try to fetch from profiles table via API route (ensures JWT is sent correctly)
+            let savedUsername: string | null = null
+            let savedAvatar: string | null = null
+            
+            if (clerkSession) {
                 try {
-                    const { data: profileData, error: profileError } = await supabase
-                        .from('profiles')
-                        .select('username, avatar_url')
-                        .eq('id', user.id)
-                        .single()
+                    const token = await clerkSession.getToken({ template: 'supabase' })
+                    if (token) {
+                        const response = await fetch('/api/profile', {
+                            method: 'GET',
+                            headers: {
+                                'Authorization': `Bearer ${token}`
+                            }
+                        })
 
-                    if (!profileError && profileData) {
-                        if (profileData.username) savedUsername = profileData.username
-                        if (profileData.avatar_url) savedAvatar = profileData.avatar_url
+                        if (response.ok) {
+                            const result = await response.json()
+                            if (result.data) {
+                                savedUsername = result.data.username || null
+                                savedAvatar = result.data.avatar_url || null
+                                console.log('✅ Profile fetched from API:', { savedUsername, savedAvatar })
+                            } else {
+                                // Profile doesn't exist - create it automatically
+                                console.log('📝 Creating new profile for user:', clerkUser.id)
+                                const createResponse = await fetch('/api/profile', {
+                                    method: 'PUT',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': `Bearer ${token}`
+                                    },
+                                    body: JSON.stringify({
+                                        username: clerkUser.fullName || clerkUser.firstName || null,
+                                        avatar_url: clerkUser.imageUrl || null
+                                    })
+                                })
+
+                                if (createResponse.ok) {
+                                    console.log('✅ Profile created successfully')
+                                    // Fetch the newly created profile
+                                    const fetchResponse = await fetch('/api/profile', {
+                                        method: 'GET',
+                                        headers: {
+                                            'Authorization': `Bearer ${token}`
+                                        }
+                                    })
+                                    if (fetchResponse.ok) {
+                                        const fetchResult = await fetchResponse.json()
+                                        if (fetchResult.data) {
+                                            savedUsername = fetchResult.data.username || null
+                                            savedAvatar = fetchResult.data.avatar_url || null
+                                        }
+                                    }
+                                } else {
+                                    const createError = await createResponse.json()
+                                    console.warn('Could not create profile:', createError)
+                                }
+                            }
+                        } else {
+                            const error = await response.json()
+                            console.warn('Could not fetch profile:', error)
+                        }
                     }
                 } catch (err: any) {
-                    // Profiles table doesn't exist or has RLS issues - that's okay
-                    // 406 errors are expected if the table doesn't exist or has RLS restrictions
-                    // Silently ignore these errors - we'll use user_metadata instead
-                    if (err?.code !== 'PGRST116' && err?.status !== 406) {
-                        console.log('Profiles table not available, using user metadata only')
-                    }
+                    console.warn('Error fetching profile from API:', err)
                 }
-
-                // Priority order for username:
-                // 1. Saved username from profiles table
-                // 2. Saved display_name from user_metadata (user's custom name)
-                // 3. Saved username from user_metadata
-                // 4. Google OAuth full_name (fallback)
-                // 5. Email username (fallback)
-                const displayName = savedUsername || 
-                                  user.user_metadata?.display_name || 
-                                  user.user_metadata?.username || 
-                                  user.user_metadata?.full_name || 
-                                  user.email?.split('@')[0] || 
-                                  'User Name'
-                
-                // Priority order for avatar:
-                // 1. Saved avatar from profiles table
-                // 2. custom_avatar_url from user_metadata (user's uploaded custom avatar - highest priority)
-                // 3. avatar_url from user_metadata (but only if it's from Supabase Storage, not Google)
-                // 4. Google OAuth picture (fallback)
-                console.log('🔍 Avatar priority check:', {
-                    savedAvatarFromTable: savedAvatar,
-                    customAvatarUrl: user.user_metadata?.custom_avatar_url,
-                    userMetadataAvatarUrl: user.user_metadata?.avatar_url,
-                    userMetadataPicture: user.user_metadata?.picture,
-                    fullUserMetadata: user.user_metadata
-                })
-                
-                // Check if avatar_url is from Supabase Storage (not Google)
-                const avatarUrl = user.user_metadata?.avatar_url
-                const isSupabaseStorageUrl = avatarUrl && avatarUrl.includes('supabase.co/storage')
-                
-                let avatar = savedAvatar || 
-                            user.user_metadata?.custom_avatar_url ||  // Custom uploaded avatar (highest priority)
-                            (isSupabaseStorageUrl ? avatarUrl : null) ||  // Only use avatar_url if it's from Supabase
-                            user.user_metadata?.picture ||  // Google picture as fallback
-                            null
-                
-                console.log('🎯 Final avatar selected:', avatar, 'source:', 
-                    savedAvatar ? 'profiles table' :
-                    user.user_metadata?.custom_avatar_url ? 'user_metadata.custom_avatar_url (uploaded)' :
-                    isSupabaseStorageUrl ? 'user_metadata.avatar_url (Supabase Storage)' :
-                    user.user_metadata?.picture ? 'user_metadata.picture (Google)' :
-                    'none')
-                
-                // If avatar is a storage path (not a full URL), convert it to a public URL
-                if (avatar && !avatar.startsWith('http')) {
-                    // It's a storage path, get the public URL
-                    const { data: { publicUrl } } = supabase.storage
-                        .from('avatars')
-                        .getPublicUrl(avatar)
-                    avatar = publicUrl
-                }
-                
-                setUsername(displayName)
-                setAvatarUrl(avatar)
-                console.log('Profile loaded:', { 
-                    displayName, 
-                    avatar, 
-                    hasAvatar: !!avatar,
-                    avatarUrlState: avatar,
-                    avatarLength: avatar?.length || 0,
-                    userMetadata: user.user_metadata,
-                    savedAvatarFromTable: savedAvatar,
-                    finalAvatar: avatar
-                })
-                console.log('🔍 Setting avatarUrl state to:', avatar)
-            } else {
-                // No user, reset to defaults
-                setUsername('User Name')
-                setAvatarUrl(null)
             }
+
+            // Priority order for username:
+            // 1. Saved username from profiles table
+            // 2. Clerk user's full name
+            // 3. Clerk user's first name
+            // 4. Email username (fallback)
+            const displayName = savedUsername || 
+                              clerkUser.fullName || 
+                              clerkUser.firstName || 
+                              clerkUser.emailAddresses[0]?.emailAddress?.split('@')[0] || 
+                              'User Name'
+            
+            // Priority order for avatar:
+            // 1. Saved avatar from profiles table
+            // 2. Clerk user's image URL
+            let avatar = savedAvatar || 
+                        clerkUser.imageUrl || 
+                        null
+            
+            // If avatar is a storage path (not a full URL), convert it to a public URL
+            if (avatar && !avatar.startsWith('http') && supabase) {
+                // It's a storage path, get the public URL
+                const { data: { publicUrl } } = supabase.storage
+                    .from('avatars')
+                    .getPublicUrl(avatar)
+                avatar = publicUrl
+            }
+            
+            console.log('📸 Setting avatar URL:', avatar)
+            console.log('📸 Saved avatar from DB:', savedAvatar)
+            console.log('📸 Clerk image URL:', clerkUser.imageUrl)
+            
+            setUsername(displayName)
+            setAvatarUrl(avatar)
+            // Update avatar key to force image refresh
+            if (avatar !== avatarUrl) {
+                setAvatarKey(prev => prev + 1)
+            }
+            console.log('Profile loaded:', { 
+                displayName, 
+                avatar, 
+                hasAvatar: !!avatar,
+                clerkUserId: clerkUser.id,
+                avatarUrlState: avatar
+            })
         } catch (error) {
             console.error('Error fetching user profile:', error)
+            // Fallback to Clerk data if API fails
+            if (clerkUser) {
+                setUsername(clerkUser.fullName || clerkUser.firstName || 'User Name')
+                setAvatarUrl(clerkUser.imageUrl || null)
+            }
         }
     }
 
     useEffect(() => {
-        fetchUserProfile()
-
-        // Listen for auth state changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            if (session?.user) {
-                fetchUserProfile()
-            } else {
-                setUsername('User Name')
-                setAvatarUrl(null)
-            }
-        })
-
-        return () => {
-            subscription.unsubscribe()
+        if (clerkUser && clerkSession) {
+            fetchUserProfile()
+        } else {
+            setUsername('User Name')
+            setAvatarUrl(null)
         }
-    }, [])
+    }, [clerkUser, clerkSession])
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -222,12 +259,92 @@ export default function Sidebar() {
 
     const handleSettingsUpdate = async () => {
         console.log('🔄 Settings update triggered - refreshing profile...')
-        // Wait a moment for Supabase to sync the user metadata update
-        await new Promise(resolve => setTimeout(resolve, 800))
+        // Wait a moment for the database to sync
+        await new Promise(resolve => setTimeout(resolve, 1000))
         
-        // Simply call fetchUserProfile to refresh everything
-        await fetchUserProfile()
-        console.log('✅ Profile refresh complete')
+        // Force refresh by calling fetchUserProfile
+        // Make sure we have the session before fetching
+        if (clerkUser && clerkSession) {
+            await fetchUserProfile()
+            console.log('✅ Profile refresh complete')
+        } else {
+            console.warn('⚠️ Cannot refresh profile - missing clerkUser or clerkSession')
+            // Try again after a short delay
+            setTimeout(async () => {
+                if (clerkUser && clerkSession) {
+                    await fetchUserProfile()
+                }
+            }, 500)
+        }
+    }
+
+    // Fetch saved sessions
+    const fetchSessions = async () => {
+        if (!clerkUser || !clerkSession) {
+            setIsLoadingSessions(false)
+            return
+        }
+
+        setIsLoadingSessions(true)
+        try {
+            const token = await clerkSession.getToken({ template: 'supabase' })
+            
+            if (!token) {
+                console.warn('No token available for fetching sessions')
+                setIsLoadingSessions(false)
+                return
+            }
+
+            console.log('📥 Fetching sessions from API...')
+            const response = await fetch('/api/sessions', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+
+            console.log('📥 Sessions API response:', { status: response.status, ok: response.ok })
+
+            if (response.ok) {
+                const data = await response.json()
+                console.log('📥 Fetched sessions:', data?.length || 0, 'sessions')
+                setSessions(data || [])
+            } else {
+                const error = await response.json()
+                console.error('❌ Error fetching sessions:', error)
+            }
+        } catch (error) {
+            console.error('Error fetching sessions:', error)
+        } finally {
+            setIsLoadingSessions(false)
+        }
+    }
+
+    // Load sessions when sidebar expands and history is shown
+    useEffect(() => {
+        if (isExpanded && showHistory && clerkUser && clerkSession) {
+            fetchSessions()
+        }
+    }, [isExpanded, showHistory, clerkUser, clerkSession])
+
+    const handleLoadSession = (session: Session) => {
+        if (onLoadSession) {
+            onLoadSession(session)
+            setIsExpanded(false)
+            setShowHistory(false)
+        }
+    }
+
+    const formatDate = (dateString: string) => {
+        const date = new Date(dateString)
+        const now = new Date()
+        const diffTime = Math.abs(now.getTime() - date.getTime())
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+        
+        if (diffDays === 0) return 'Today'
+        if (diffDays === 1) return 'Yesterday'
+        if (diffDays < 7) return `${diffDays} days ago`
+        if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`
+        return date.toLocaleDateString()
     }
 
     return (
@@ -258,32 +375,80 @@ export default function Sidebar() {
             {/* Navigation Items */}
             <div className="flex-1 flex flex-col gap-8 px-6 mt-8">
                 {/* History Icon */}
-                <Tooltip
-                    content="Spiral history"
-                    placement="right"
-                    classNames={{
-                        content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
-                    }}
-                >
-                    <button
-                        onClick={() => setIsExpanded(!isExpanded)}
-                        className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors"
+                <div className="flex flex-col">
+                    <Tooltip
+                        content="Session history"
+                        placement="right"
+                        classNames={{
+                            content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
+                        }}
                     >
-                        <Clock className="w-6 h-6 flex-shrink-0" />
-                        <AnimatePresence>
-                            {isExpanded && (
-                                <motion.span
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    className="whitespace-nowrap font-medium"
-                                >
-                                    History
-                                </motion.span>
-                            )}
-                        </AnimatePresence>
-                    </button>
-                </Tooltip>
+                        <button
+                            onClick={() => {
+                                if (!isExpanded) {
+                                    setIsExpanded(true)
+                                }
+                                setShowHistory(!showHistory)
+                            }}
+                            className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors"
+                        >
+                            <Clock className="w-6 h-6 flex-shrink-0" />
+                            <AnimatePresence>
+                                {isExpanded && (
+                                    <motion.div
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        className="flex items-center justify-between flex-1"
+                                    >
+                                        <span className="whitespace-nowrap font-medium">History</span>
+                                        <ChevronDown 
+                                            className={`w-4 h-4 transition-transform ${showHistory ? 'rotate-180' : ''}`} 
+                                        />
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </button>
+                    </Tooltip>
+                    
+                    {/* History List */}
+                    <AnimatePresence>
+                        {isExpanded && showHistory && (
+                            <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                className="ml-10 mt-2 space-y-2 max-h-64 overflow-y-auto"
+                            >
+                                {isLoadingSessions ? (
+                                    <p className="text-xs text-gray-500">Loading...</p>
+                                ) : sessions.length === 0 ? (
+                                    <p className="text-xs text-gray-500">No saved sessions</p>
+                                ) : (
+                                    sessions.map((session) => (
+                                        <button
+                                            key={session.id}
+                                            onClick={() => handleLoadSession(session)}
+                                            className="w-full text-left p-2 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
+                                        >
+                                            <p className="text-sm font-medium text-gray-900 truncate">
+                                                {session.title || 'Untitled Session'}
+                                            </p>
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                {formatDate(session.created_at)}
+                                            </p>
+                                            {session.matches_data && Array.isArray(session.matches_data) && (
+                                                <p className="text-xs text-gray-400 mt-1">
+                                                    {session.matches_data.length} matches
+                                                </p>
+                                            )}
+                                        </button>
+                                    ))
+                                )}
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
 
                 {/* Messaging Icon */}
                 <Tooltip
@@ -412,8 +577,8 @@ export default function Sidebar() {
                         <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 flex-shrink-0 border-2 border-gray-300 relative">
                             {avatarUrl ? (
                                 <img
-                                    key={`avatar-${avatarUrl}`}
-                                    src={avatarUrl}
+                                    key={`avatar-${avatarUrl}-${avatarKey}`}
+                                    src={`${avatarUrl}${avatarUrl.includes('?') ? '&' : '?'}_t=${avatarKey}`}
                                     alt="Profile"
                                     className="w-full h-full object-cover block"
                                     style={{ display: 'block' }}
@@ -425,7 +590,12 @@ export default function Sidebar() {
                                         console.error('❌ Profile image failed to load:', avatarUrl)
                                         console.error('Image error details:', e)
                                         const target = e.target as HTMLImageElement
-                                        target.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`
+                                        // Try Clerk image first, then fallback to generated avatar
+                                        if (clerkUser?.imageUrl) {
+                                            target.src = clerkUser.imageUrl
+                                        } else {
+                                            target.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`
+                                        }
                                     }}
                                 />
                             ) : (

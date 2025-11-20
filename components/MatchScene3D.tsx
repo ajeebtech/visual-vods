@@ -6,6 +6,8 @@ import { OrbitControls, PerspectiveCamera, Html } from '@react-three/drei'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
 import * as THREE from 'three'
+import { useUser, useSession } from '@clerk/nextjs'
+import NotesPanel from '@/components/NotesPanel'
 import {
   Select,
   SelectContent,
@@ -47,6 +49,12 @@ interface Match {
 
 interface MatchScene3DProps {
   matches: Match[]
+  team1Name?: string
+  team1Id?: string
+  team2Name?: string
+  team2Id?: string
+  tournament?: string
+  playerName?: string
 }
 
 // Helper to get YouTube thumbnail from video ID or URL
@@ -331,12 +339,25 @@ function MatchTile({
   )
 }
 
-export default function MatchScene3D({ matches }: MatchScene3DProps) {
+export default function MatchScene3D({ 
+  matches, 
+  team1Name, 
+  team1Id, 
+  team2Name, 
+  team2Id, 
+  tournament, 
+  playerName 
+}: MatchScene3DProps) {
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null)
   const [selectedVOD, setSelectedVOD] = useState<VODLink | null>(null)
   const [loadedThumbnails, setLoadedThumbnails] = useState<Set<number>>(new Set())
   const [dateFilter, setDateFilter] = useState<'30' | '50' | '90' | 'all'>('all')
   const [visibleMatches, setVisibleMatches] = useState<number>(0)
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [isSavingSession, setIsSavingSession] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const youtubeIframeRef = useRef<HTMLIFrameElement | null>(null)
+  const { session: clerkSession } = useSession()
   
   // Filter only YouTube VODs with embed URLs and remove duplicates
   const youtubeMatches = useMemo(() => {
@@ -430,6 +451,88 @@ export default function MatchScene3D({ matches }: MatchScene3DProps) {
     () => generateMatchPositions(filteredMatches.length),
     [filteredMatches.length]
   )
+
+  // Auto-save session when ALL matches are fully loaded (always, since user must be logged in to search)
+  useEffect(() => {
+    const saveSession = async () => {
+      // Don't save if:
+      // - No matches
+      // - Not all matches are visible yet (wait for progressive loading to complete)
+      // - Already saved
+      // - Currently saving
+      if (
+        filteredMatches.length === 0 || 
+        visibleMatches < filteredMatches.length || 
+        sessionId || 
+        isSavingSession
+      ) {
+        return
+      }
+
+      setIsSavingSession(true)
+      setSaveError(null)
+
+      try {
+        if (!clerkSession) {
+          console.error('No session found - user should be logged in to search')
+          setSaveError('Authentication required')
+          setIsSavingSession(false)
+          return
+        }
+
+        const token = await clerkSession.getToken({ template: 'supabase' })
+        
+        if (!token) {
+          console.error('No token found - user should be logged in to search')
+          setSaveError('Authentication required')
+          setIsSavingSession(false)
+          return
+        }
+
+        console.log(`Saving session with ${filteredMatches.length} matches...`)
+
+        const response = await fetch('/api/sessions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            team1_name: team1Name,
+            team1_id: team1Id,
+            team2_name: team2Name,
+            team2_id: team2Id,
+            tournament,
+            player_name: playerName,
+            matches_data: filteredMatches
+          })
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          setSessionId(data.id)
+          console.log('Session saved successfully:', data.id, `(${filteredMatches.length} matches)`)
+          setSaveError(null)
+        } else {
+          const error = await response.json()
+          console.error('Error saving session:', error)
+          setSaveError(error.error || 'Failed to save session')
+        }
+      } catch (error: any) {
+        console.error('Error saving session:', error)
+        setSaveError(error.message || 'Failed to save session. Check console for details.')
+      } finally {
+        setIsSavingSession(false)
+      }
+    }
+
+    // Only save when all matches are visible (progressive loading complete)
+    // Add a small delay after all matches are visible to ensure everything is ready
+    if (visibleMatches >= filteredMatches.length && filteredMatches.length > 0) {
+      const timer = setTimeout(saveSession, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [visibleMatches, filteredMatches.length, sessionId, isSavingSession, team1Name, team1Id, team2Name, team2Id, tournament, playerName])
   
   const handleThumbnailClick = (match: Match) => {
     if (match.vodLinks.length > 0) {
@@ -441,6 +544,34 @@ export default function MatchScene3D({ matches }: MatchScene3DProps) {
   const closeEmbed = () => {
     setSelectedMatch(null)
     setSelectedVOD(null)
+  }
+
+  // Handle timestamp click - jump to that time in YouTube video
+  const handleTimestampClick = (seconds: number) => {
+    if (!youtubeIframeRef.current || !selectedVOD?.embedUrl) return
+
+    try {
+      // Extract base URL without query params
+      const baseUrl = selectedVOD.embedUrl.split('?')[0]
+      
+      // Update the iframe src with the timestamp
+      const newEmbedUrl = `${baseUrl}?start=${seconds}&autoplay=1`
+      youtubeIframeRef.current.src = newEmbedUrl
+      
+      // Also try to use YouTube IFrame API if available
+      if (youtubeIframeRef.current.contentWindow) {
+        youtubeIframeRef.current.contentWindow.postMessage(
+          JSON.stringify({
+            event: 'command',
+            func: 'seekTo',
+            args: [seconds, true]
+          }),
+          '*'
+        )
+      }
+    } catch (error) {
+      console.error('Error jumping to timestamp:', error)
+    }
   }
   
   return (
@@ -536,22 +667,49 @@ export default function MatchScene3D({ matches }: MatchScene3DProps) {
       
       {/* Info overlay */}
       <div className="fixed top-4 left-24 z-40 bg-white/90 backdrop-blur-sm rounded-lg px-4 py-2 shadow-lg">
-        <p className="text-sm font-medium text-gray-900">
-          {filteredMatches.length} matches {dateFilter !== 'all' ? `(last ${dateFilter}d)` : ''} • {matchesToDisplay.length} visible • {loadedThumbnails.size} thumbnails loaded
-        </p>
-        <p className="text-xs text-gray-600 mt-1">
-          First 20 matches closer • Older matches further back • Click and drag to pan
-        </p>
-        {matchesToDisplay.length < filteredMatches.length && (
-          <p className="text-xs text-blue-600 mt-1">
-            Loading matches... ({matchesToDisplay.length} / {filteredMatches.length} shown)
-          </p>
-        )}
-        {loadedThumbnails.size < matchesToDisplay.length && (
-          <p className="text-xs text-blue-600 mt-1">
-            Loading thumbnails... ({matchesToDisplay.length - loadedThumbnails.size} remaining)
-          </p>
-        )}
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-gray-900">
+              {filteredMatches.length} matches {dateFilter !== 'all' ? `(last ${dateFilter}d)` : ''} • {matchesToDisplay.length} visible • {loadedThumbnails.size} thumbnails loaded
+            </p>
+            <p className="text-xs text-gray-600 mt-1">
+              First 20 matches closer • Older matches further back • Click and drag to pan
+            </p>
+            {matchesToDisplay.length < filteredMatches.length && (
+              <p className="text-xs text-blue-600 mt-1">
+                Loading matches... ({matchesToDisplay.length} / {filteredMatches.length} shown)
+              </p>
+            )}
+            {loadedThumbnails.size < matchesToDisplay.length && (
+              <p className="text-xs text-blue-600 mt-1">
+                Loading thumbnails... ({matchesToDisplay.length - loadedThumbnails.size} remaining)
+              </p>
+            )}
+          </div>
+          
+          {/* Session Save Status */}
+          <div className="flex flex-col items-end gap-1">
+            {isSavingSession ? (
+              <div className="flex items-center gap-2 text-xs text-blue-600">
+                <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
+                <span>Saving session...</span>
+              </div>
+            ) : sessionId ? (
+              <div className="flex items-center gap-2 text-xs text-green-600">
+                <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                <span>Session saved</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <span className="w-2 h-2 bg-gray-400 rounded-full"></span>
+                <span>Preparing to save...</span>
+              </div>
+            )}
+            {saveError && (
+              <p className="text-xs text-red-600 max-w-[200px] text-right">{saveError}</p>
+            )}
+          </div>
+        </div>
       </div>
       
       {/* Embed Modal */}
@@ -568,44 +726,58 @@ export default function MatchScene3D({ matches }: MatchScene3DProps) {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="relative w-full max-w-6xl aspect-video bg-black rounded-lg overflow-hidden"
+              className="relative w-full max-w-7xl flex gap-4"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Close button */}
-              <button
-                onClick={closeEmbed}
-                className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors"
-              >
-                <X className="w-6 h-6 text-white" />
-              </button>
-              
-              {/* Embed iframe */}
-              <iframe
-                src={selectedVOD.embedUrl}
-                className="w-full h-full"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                title={`Match ${selectedMatch.matchId} VOD`}
-              />
-              
-              {/* VOD selector if multiple VODs */}
-              {selectedMatch.vodLinks.length > 1 && (
-                <div className="absolute bottom-4 left-4 right-4 flex gap-2 overflow-x-auto">
-                  {selectedMatch.vodLinks.map((vod, index) => (
-                    <button
-                      key={index}
-                      onClick={() => setSelectedVOD(vod)}
-                      className={`px-3 py-1 rounded text-sm font-medium whitespace-nowrap ${
-                        selectedVOD === vod
-                          ? 'bg-purple-600 text-white'
-                          : 'bg-white/20 text-white hover:bg-white/30'
-                      }`}
-                    >
-                      YouTube {index + 1}
-                    </button>
-                  ))}
-                </div>
-              )}
+              {/* Video container */}
+              <div className="relative flex-1 aspect-video bg-black rounded-lg overflow-hidden">
+                {/* Close button */}
+                <button
+                  onClick={closeEmbed}
+                  className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors"
+                >
+                  <X className="w-6 h-6 text-white" />
+                </button>
+                
+                {/* Embed iframe */}
+                <iframe
+                  ref={youtubeIframeRef}
+                  src={selectedVOD.embedUrl}
+                  className="w-full h-full"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  title={`Match ${selectedMatch.matchId} VOD`}
+                />
+                
+                {/* VOD selector if multiple VODs */}
+                {selectedMatch.vodLinks.length > 1 && (
+                  <div className="absolute bottom-4 left-4 right-4 flex gap-2 overflow-x-auto">
+                    {selectedMatch.vodLinks.map((vod, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setSelectedVOD(vod)}
+                        className={`px-3 py-1 rounded text-sm font-medium whitespace-nowrap ${
+                          selectedVOD === vod
+                            ? 'bg-purple-600 text-white'
+                            : 'bg-white/20 text-white hover:bg-white/30'
+                        }`}
+                      >
+                        YouTube {index + 1}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Notes Panel */}
+              <div className="flex-shrink-0">
+                <NotesPanel
+                  sessionId={sessionId}
+                  matchHref={selectedMatch.href}
+                  vodUrl={selectedVOD.url}
+                  onTimestampClick={handleTimestampClick}
+                />
+              </div>
             </motion.div>
           </motion.div>
         )}

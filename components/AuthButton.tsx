@@ -1,10 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { supabase } from '@/lib/supabase'
-import { useRouter } from 'next/router'
-import LoginModal from './LoginModal'
+import { useUser, SignInButton, SignOutButton } from '@clerk/nextjs'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -148,45 +146,10 @@ interface AuthButtonProps {
 }
 
 export default function AuthButton({ isSidebarExpanded = false }: AuthButtonProps) {
-  const [user, setUser] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
-  const router = useRouter()
+  const { user, isLoaded } = useUser()
+  const [showSignOutDialog, setShowSignOutDialog] = useState(false)
 
-  useEffect(() => {
-    // Check current session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      setLoading(false)
-    })
-
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
-      setLoading(false)
-      // Don't reload - just update the state
-      // The parent components will update via their own auth listeners
-    })
-
-    return () => subscription.unsubscribe()
-  }, [])
-
-
-  const handleLogout = async () => {
-    try {
-      const { error } = await supabase.auth.signOut()
-      if (error) throw error
-      // State will update via onAuthStateChange listener
-      setUser(null)
-    } catch (error: any) {
-      console.error('Error signing out:', error.message)
-      alert('Failed to sign out: ' + error.message)
-    }
-  }
-
-  if (loading) {
+  if (!isLoaded) {
     return (
       <div className="flex items-center gap-2 px-4 py-2 text-gray-500">
         <div className="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
@@ -196,7 +159,7 @@ export default function AuthButton({ isSidebarExpanded = false }: AuthButtonProp
 
   if (user) {
     return (
-      <AlertDialog>
+      <AlertDialog open={showSignOutDialog} onOpenChange={setShowSignOutDialog}>
         <AlertDialogTrigger asChild>
           <button
             className={`w-full flex items-center ${isSidebarExpanded ? 'gap-4' : 'justify-center'} text-gray-500 hover:text-black transition-colors`}
@@ -229,10 +192,12 @@ export default function AuthButton({ isSidebarExpanded = false }: AuthButtonProp
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleLogout} className="bg-red-500 text-white hover:bg-red-600">
-              Sign Out
-            </AlertDialogAction>
+            <AlertDialogCancel className="text-black">Cancel</AlertDialogCancel>
+            <SignOutButton>
+              <AlertDialogAction className="bg-red-500 text-white hover:bg-red-600">
+                Sign Out
+              </AlertDialogAction>
+            </SignOutButton>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -240,10 +205,9 @@ export default function AuthButton({ isSidebarExpanded = false }: AuthButtonProp
   }
 
   return (
-    <>
+    <SignInButton mode="modal">
       <button
-        onClick={() => setIsLoginModalOpen(true)}
-        className={`w-full flex items-center ${isSidebarExpanded ? 'gap-4 px-4 py-2' : 'justify-center p-2'} bg-black text-white rounded-lg hover:bg-gray-800 transition-colors`}
+        className={`w-full flex items-center ${isSidebarExpanded ? 'gap-4 px-4 py-2' : 'justify-center p-2'} bg-black text-white rounded-lg hover:bg-gray-800 transition-colors cursor-pointer`}
       >
         <SignInIcon className="w-5 h-5 flex-shrink-0" />
         <AnimatePresence>
@@ -264,11 +228,7 @@ export default function AuthButton({ isSidebarExpanded = false }: AuthButtonProp
           )}
         </AnimatePresence>
       </button>
-      <LoginModal
-        isOpen={isLoginModalOpen}
-        onClose={() => setIsLoginModalOpen(false)}
-      />
-    </>
+    </SignInButton>
   )
 }
 

@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Upload, User, Settings as SettingsIcon, Bell, Palette, Shield, UserCircle } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { useUser, useSession } from '@clerk/nextjs'
+import { useSupabase } from '@/lib/supabase-client'
 
 type SettingsTab = 'general' | 'profile' | 'notifications' | 'security'
 
@@ -23,6 +24,9 @@ export default function SettingsModal({
   currentAvatarUrl,
   onUpdate
 }: SettingsModalProps) {
+  const { user: clerkUser } = useUser()
+  const { session: clerkSession } = useSession()
+  const { supabase } = useSupabase()
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile')
   const [username, setUsername] = useState(currentUsername)
   const [avatarUrl, setAvatarUrl] = useState(currentAvatarUrl || '')
@@ -57,9 +61,7 @@ export default function SettingsModal({
     setError(null)
 
     try {
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
+      if (!clerkUser || !supabase) {
         setError('You must be logged in to upload a profile picture')
         setUploading(false)
         return
@@ -108,7 +110,7 @@ export default function SettingsModal({
 
       // Create a unique file name - upload directly to bucket root
       const fileExt = file.name.split('.').pop()
-      const fileName = `${user.id}-${Date.now()}.${fileExt}`
+      const fileName = `${clerkUser.id}-${Date.now()}.${fileExt}`
       // Upload directly to bucket, not in a subfolder
       const filePath = fileName
 
@@ -156,7 +158,7 @@ export default function SettingsModal({
           )
         } else if (uploadError.message.includes('already exists')) {
           // Try with a different filename
-          const retryFileName = `${user.id}-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
+          const retryFileName = `${clerkUser.id}-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
           const { error: retryError } = await supabase.storage
             .from('avatars')
             .upload(retryFileName, file, {
@@ -176,13 +178,23 @@ export default function SettingsModal({
             
             // Auto-save the avatar URL immediately after upload
             try {
-              const { data: { user } } = await supabase.auth.getUser()
-              if (user) {
-                const { error: updateError } = await supabase.auth.updateUser({
-                  data: { avatar_url: publicUrl }
-                })
-                if (!updateError && onUpdate) {
-                  setTimeout(() => onUpdate(), 300)
+              if (clerkUser && clerkSession) {
+                const token = await clerkSession.getToken({ template: 'supabase' })
+                if (token) {
+                  const response = await fetch('/api/profile', {
+                    method: 'PUT',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                      avatar_url: publicUrl
+                    })
+                  })
+                  const result = await response.json()
+                  if (response.ok && onUpdate) {
+                    setTimeout(() => onUpdate(), 300)
+                  }
                 }
               }
             } catch (err) {
@@ -210,79 +222,45 @@ export default function SettingsModal({
       
       // Auto-save the avatar URL immediately after upload
       try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          // Update user metadata immediately
-          // Use 'custom_avatar_url' to avoid conflicts with Google OAuth which sets 'avatar_url'
-          console.log('💾 Attempting to save custom_avatar_url to user_metadata:', publicUrl)
-          console.log('📋 Current user metadata before save:', user.user_metadata)
+        if (clerkUser && clerkSession) {
+          console.log('💾 Attempting to save avatar URL to profiles table:', publicUrl)
           
-          const { data: updateData, error: updateError } = await supabase.auth.updateUser({
-            data: { 
-              custom_avatar_url: publicUrl,
-              avatar_url: publicUrl  // Also save to avatar_url for backwards compatibility
-            }
-          })
-          
-          if (updateError) {
-            console.error('❌ Could not auto-save avatar to user metadata:', updateError)
-            console.error('Error details:', {
-              message: updateError.message,
-              status: updateError.status,
-              error: updateError
+          const token = await clerkSession.getToken({ template: 'supabase' })
+          if (token) {
+            const response = await fetch('/api/profile', {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({
+                avatar_url: publicUrl
+              })
             })
-            setError(`Failed to save profile picture: ${updateError.message}. Please try clicking "Save Changes" manually.`)
+
+            const result = await response.json()
             
-            // Try profiles table as fallback
-            try {
-              await supabase
-                .from('profiles')
-                .upsert({
-                  id: user.id,
-                  avatar_url: publicUrl,
-                  updated_at: new Date().toISOString()
-                }, { onConflict: 'id' })
-              console.log('✅ Saved to profiles table as fallback')
-            } catch (err) {
-              console.warn('Could not save to profiles table:', err)
-            }
-          } else {
-            console.log('✅ Avatar URL auto-saved to user metadata')
-            console.log('📋 Update response:', updateData)
-            console.log('📋 Updated user data from response:', updateData?.user?.user_metadata)
+            console.log('📡 Profile API response:', {
+              status: response.status,
+              ok: response.ok,
+              result
+            })
             
-            // Wait a bit for Supabase to sync
-            await new Promise(resolve => setTimeout(resolve, 1000))
-            
-            // Verify it was saved by fetching again (multiple times to ensure sync)
-            let verifyAttempts = 0
-            let saved = false
-            while (verifyAttempts < 3 && !saved) {
-              const { data: { user: verifyUser } } = await supabase.auth.getUser()
-              console.log(`🔍 Verification attempt ${verifyAttempts + 1} - user_metadata:`, verifyUser?.user_metadata)
+            if (!response.ok) {
+              console.error('❌ Could not auto-save avatar to profiles table:', result)
+              setError(`Failed to save profile picture: ${result.error || 'Unknown error'}. Please try clicking "Save Changes" manually.`)
+            } else {
+              console.log('✅ Avatar URL auto-saved to profiles table:', result)
               
-              if (verifyUser?.user_metadata?.custom_avatar_url === publicUrl || 
-                  verifyUser?.user_metadata?.avatar_url === publicUrl) {
-                console.log('✅ Verified: Avatar URL is saved in user_metadata!')
-                saved = true
-              } else {
-                verifyAttempts++
-                if (verifyAttempts < 3) {
-                  console.log('⏳ Waiting for sync...')
-                  await new Promise(resolve => setTimeout(resolve, 500))
-                } else {
-                  console.warn('⚠️ Avatar URL not found in user_metadata after multiple attempts')
-                  setError('Avatar uploaded but may not have saved. Please refresh the page or click "Save Changes".')
-                }
+              // Trigger update callback to refresh sidebar
+              if (onUpdate) {
+                setTimeout(() => {
+                  onUpdate()
+                }, 1000)
               }
             }
-            
-            // Trigger update callback to refresh sidebar
-            if (onUpdate) {
-              setTimeout(() => {
-                onUpdate()
-              }, 800)
-            }
+          } else {
+            console.warn('Could not get Clerk token for auto-save')
           }
         }
       } catch (err) {
@@ -302,80 +280,72 @@ export default function SettingsModal({
     setSuccess(null)
 
     try {
-      // Get current user
-      const { data: { user }, error: userError } = await supabase.auth.getUser()
-      
-      if (userError || !user) {
+      if (!clerkUser || !supabase) {
         setError('You must be logged in to update your profile')
         setIsLoading(false)
         return
       }
 
-      // Update user metadata
-      const updates: { display_name?: string; username?: string; avatar_url?: string; custom_avatar_url?: string } = {}
-      
+      // Update profiles table (Clerk doesn't use Supabase user_metadata)
+      const profileUpdates: {
+        id: string
+        username?: string
+        avatar_url?: string
+        updated_at: string
+      } = {
+        id: clerkUser.id,
+        updated_at: new Date().toISOString()
+      }
+
       if (username !== currentUsername) {
-        updates.display_name = username
-        updates.username = username
+        profileUpdates.username = username
       }
       
       if (avatarUrl && avatarUrl !== currentAvatarUrl) {
-        // Save to both custom_avatar_url (priority) and avatar_url (backwards compatibility)
-        updates.custom_avatar_url = avatarUrl
-        updates.avatar_url = avatarUrl
+        profileUpdates.avatar_url = avatarUrl
         console.log('💾 Saving avatar URL in handleSave:', avatarUrl)
       }
 
-      // Update user metadata in Supabase
-      console.log('💾 Updating user metadata with:', updates)
-      const { data: updateData, error: updateError } = await supabase.auth.updateUser({
-        data: updates
-      })
+      console.log('💾 Updating profile with:', profileUpdates)
+      console.log('🔑 Clerk User ID:', clerkUser.id)
       
-      console.log('📋 Update response:', updateData)
-      console.log('📋 Error (if any):', updateError)
-
-      if (updateError) {
-        console.error('❌ Failed to update user metadata:', updateError)
-        setError(`Failed to save: ${updateError.message}`)
+      // Get Clerk JWT token to send with the request
+      if (!clerkSession) {
+        setError('You must be logged in to update your profile')
         setIsLoading(false)
         return
-      } else {
-        console.log('✅ User metadata updated successfully')
-        console.log('📋 Updated user from response:', updateData?.user?.user_metadata)
-        
-        // Verify the save
-        await new Promise(resolve => setTimeout(resolve, 500))
-        const { data: { user: verifyUser } } = await supabase.auth.getUser()
-        console.log('🔍 Verification after save - user_metadata:', verifyUser?.user_metadata)
-      }
-      
-      // Also try updating the profiles table (if it exists) as a backup
-      if (avatarUrl) {
-        try {
-          const { error: profileError } = await supabase
-            .from('profiles')
-            .upsert({
-              id: user.id,
-              username: username,
-              avatar_url: avatarUrl,
-              updated_at: new Date().toISOString()
-            }, {
-              onConflict: 'id'
-            })
-
-          if (profileError) {
-            // If profiles table doesn't exist, that's okay - we'll just use user metadata
-            console.warn('Profiles table not available, using user metadata only:', profileError.message)
-          } else {
-            console.log('✅ Also saved to profiles table')
-          }
-        } catch (err) {
-          // Profiles table might not exist, that's okay
-          console.warn('Could not update profiles table:', err)
-        }
       }
 
+      const token = await clerkSession.getToken({ template: 'supabase' })
+      if (!token) {
+        setError('Failed to get authentication token. Please try signing in again.')
+        setIsLoading(false)
+        return
+      }
+
+      // Use API route instead of direct Supabase client to ensure JWT is sent correctly
+      const response = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          username: username || null,
+          avatar_url: avatarUrl || null
+        })
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        console.error('❌ Failed to save profile:', result)
+        setError(`Failed to save: ${result.error || 'Unknown error'}. ${result.hint ? `Hint: ${result.hint}` : ''}`)
+        setIsLoading(false)
+        return
+      }
+
+      console.log('✅ Profile updated successfully')
       setSuccess('Profile updated successfully!')
       
       // Call onUpdate callback to refresh parent component
