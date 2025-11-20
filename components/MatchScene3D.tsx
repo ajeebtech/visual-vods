@@ -110,14 +110,14 @@ function generateMatchPositions(count: number): Array<[number, number, number]> 
     
     usedPositions.push([x, y])
     
-    // Calculate z-depth: matches 20+ are further back
+    // Calculate z-depth: latest 20 matches (first 20 after sorting newest-first) are closer to camera
     let z: number
     if (i < 20) {
-      // First 20 matches: closer to camera (0 to -3)
+      // Latest 20 matches: closer to camera (0 to -3)
       z = -Math.random() * 3
     } else {
-      // Matches 20+: further back (-3 to -15, with older ones further)
-      const age = i - 20
+      // Older matches: further back (-3 to -15, with older ones further)
+      const age = i - 20 // How many matches after the latest 20
       const maxDepth = -3 - (age * 0.4) // Each older match goes further back
       z = -3 - Math.random() * Math.min(12, maxDepth + 3)
     }
@@ -370,20 +370,29 @@ export default function MatchScene3D({ matches }: MatchScene3DProps) {
     return uniqueMatches
   }, [matches])
   
-  // Filter matches by date range
+  // Filter matches by date range and sort by date (newest first)
   const filteredMatches = useMemo(() => {
-    if (dateFilter === 'all') {
-      return youtubeMatches
+    let matches = youtubeMatches
+    
+    // Apply date filter if not 'all'
+    if (dateFilter !== 'all') {
+      const days = parseInt(dateFilter)
+      const cutoffDate = new Date()
+      cutoffDate.setDate(cutoffDate.getDate() - days)
+      
+      matches = matches.filter(match => {
+        if (!match.date) return true // Include matches without dates
+        const matchDate = new Date(match.date)
+        return matchDate >= cutoffDate
+      })
     }
     
-    const days = parseInt(dateFilter)
-    const cutoffDate = new Date()
-    cutoffDate.setDate(cutoffDate.getDate() - days)
-    
-    return youtubeMatches.filter(match => {
-      if (!match.date) return true // Include matches without dates
-      const matchDate = new Date(match.date)
-      return matchDate >= cutoffDate
+    // Sort by date: newest first (latest matches at the beginning)
+    return matches.sort((a, b) => {
+      if (!a.date && !b.date) return 0
+      if (!a.date) return 1 // Matches without dates go to the end
+      if (!b.date) return -1
+      return new Date(b.date).getTime() - new Date(a.date).getTime()
     })
   }, [youtubeMatches, dateFilter])
   

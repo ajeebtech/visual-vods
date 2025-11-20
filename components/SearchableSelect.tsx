@@ -92,7 +92,7 @@ export default function SearchableSelect({
 
   const handleSelect = (option: string | { name: string; id: string }) => {
     if (typeof option === 'string') {
-      onChange(option)
+    onChange(option)
     } else {
       onChange(option.name, option.id)
     }
@@ -192,22 +192,22 @@ export default function SearchableSelect({
                 const optionValue = getOptionValue(option)
                 const optionKey = typeof option === 'string' ? option : `${option.id}-${option.name}`
                 return (
-                  <button
+                <button
                     key={optionKey}
-                    type="button"
-                    onClick={() => handleSelect(option)}
-                    className={cn(
-                      'w-full text-left px-2 py-1.5 text-sm rounded-sm hover:bg-gray-100 focus:bg-gray-100 focus:outline-none flex items-center justify-between text-gray-900',
-                      index === highlightedIndex && 'bg-gray-100',
+                  type="button"
+                  onClick={() => handleSelect(option)}
+                  className={cn(
+                    'w-full text-left px-2 py-1.5 text-sm rounded-sm hover:bg-gray-100 focus:bg-gray-100 focus:outline-none flex items-center justify-between text-gray-900',
+                    index === highlightedIndex && 'bg-gray-100',
                       value === optionValue && 'font-medium'
-                    )}
-                    onMouseEnter={() => setHighlightedIndex(index)}
-                  >
+                  )}
+                  onMouseEnter={() => setHighlightedIndex(index)}
+                >
                     <span className="text-gray-900">{optionValue}</span>
                     {value === optionValue && (
-                      <Check className="h-4 w-4 text-gray-600" />
-                    )}
-                  </button>
+                    <Check className="h-4 w-4 text-gray-600" />
+                  )}
+                </button>
                 )
               })
             )}

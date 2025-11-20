@@ -95,8 +95,8 @@ export default function Home() {
         if (teamId && !seenNames.has(item.value)) {
           teams.push({ name: item.value, id: teamId })
           seenNames.add(item.value)
-        }
       }
+    }
     }
     
     return teams
@@ -124,8 +124,8 @@ export default function Home() {
         if (teamId && !seenNames.has(item.value)) {
           teams.push({ name: item.value, id: teamId })
           seenNames.add(item.value)
-        }
       }
+    }
     }
     
     return teams
