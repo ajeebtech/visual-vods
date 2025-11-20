@@ -1,11 +1,18 @@
 'use client'
 
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { Canvas } from '@react-three/fiber'
-import { OrbitControls, PerspectiveCamera } from '@react-three/drei'
+import { Canvas, useFrame } from '@react-three/fiber'
+import { OrbitControls, PerspectiveCamera, Html } from '@react-three/drei'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
 import * as THREE from 'three'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 interface VODLink {
   url: string
@@ -13,11 +20,29 @@ interface VODLink {
   embedUrl?: string
 }
 
+interface MatchInfo {
+  team1: {
+    name: string
+    logo: string | null
+  }
+  team2: {
+    name: string
+    logo: string | null
+  }
+  score: {
+    team1: number
+    team2: number
+  }
+  winner: 1 | 2 | null
+}
+
 interface Match {
   href: string
   matchId?: string
+  date?: string // ISO date string
   vodLinks: VODLink[]
   hasVODs: boolean
+  matchInfo?: MatchInfo
 }
 
 interface MatchScene3DProps {
@@ -49,23 +74,51 @@ const getYouTubeThumbnail = (url: string): string | null => {
 // Generate scattered positions with older matches further back
 function generateMatchPositions(count: number): Array<[number, number, number]> {
   const positions: Array<[number, number, number]> = []
-  const spread = 15 // How far to spread on x and y axes
+  const spread = 8 // Reduced spread - how far to spread on x and y axes
+  const minDistance = 2.5 // Minimum distance between thumbnails to avoid overlap
+  const usedPositions: Array<[number, number]> = []
   
   for (let i = 0; i < count; i++) {
-    // Scatter randomly on x and y
-    const x = (Math.random() - 0.5) * spread * 2
-    const y = (Math.random() - 0.5) * spread * 2
+    let attempts = 0
+    let x: number, y: number
+    let validPosition = false
+    
+    // Try to find a position that doesn't overlap
+    while (!validPosition && attempts < 50) {
+      // Scatter randomly on x and y, but closer together
+      x = (Math.random() - 0.5) * spread * 2
+      y = (Math.random() - 0.5) * spread * 2
+      
+      // Check if this position is too close to existing positions
+      validPosition = usedPositions.every(([usedX, usedY]) => {
+        const distance = Math.sqrt((x - usedX) ** 2 + (y - usedY) ** 2)
+        return distance >= minDistance
+      })
+      
+      attempts++
+    }
+    
+    // If we couldn't find a non-overlapping position, use a grid-based fallback
+    if (!validPosition) {
+      const cols = Math.ceil(Math.sqrt(count))
+      const row = Math.floor(i / cols)
+      const col = i % cols
+      x = (col - (cols - 1) / 2) * minDistance
+      y = (row - (count / cols - 1) / 2) * minDistance
+    }
+    
+    usedPositions.push([x, y])
     
     // Calculate z-depth: matches 20+ are further back
     let z: number
     if (i < 20) {
-      // First 20 matches: closer to camera (0 to -5)
-      z = -Math.random() * 5
+      // First 20 matches: closer to camera (0 to -3)
+      z = -Math.random() * 3
     } else {
-      // Matches 20+: further back (-5 to -20, with older ones further)
+      // Matches 20+: further back (-3 to -15, with older ones further)
       const age = i - 20
-      const maxDepth = -5 - (age * 0.5) // Each older match goes further back
-      z = -5 - Math.random() * Math.min(15, maxDepth + 5)
+      const maxDepth = -3 - (age * 0.4) // Each older match goes further back
+      z = -3 - Math.random() * Math.min(12, maxDepth + 3)
     }
     
     positions.push([x, y, z])
@@ -74,41 +127,59 @@ function generateMatchPositions(count: number): Array<[number, number, number]> 
   return positions
 }
 
-// 3D Match Tile Component
+// 3D Match Tile Component with fade-in animation
 function MatchTile({
   position,
   thumbnail,
   match,
   onSelect,
   index,
+  onThumbnailLoad,
+  isVisible,
 }: {
   position: [number, number, number]
   thumbnail: string | null
   match: Match
   onSelect: () => void
   index: number
+  onThumbnailLoad?: (index: number) => void
+  isVisible: boolean
 }) {
   const meshRef = useRef<THREE.Mesh>(null)
   const [hovered, setHovered] = useState(false)
   const [texture, setTexture] = useState<THREE.Texture | null>(null)
+  const opacityRef = useRef(0)
+  const [shouldAnimate, setShouldAnimate] = useState(false)
+  const animationStartTime = useRef<number | null>(null)
   
   // Load texture
   useEffect(() => {
     let currentTexture: THREE.Texture | null = null
+    let isMounted = true
     
     if (thumbnail) {
       const loader = new THREE.TextureLoader()
       loader.load(
         thumbnail,
         (tex) => {
+          if (!isMounted) {
+            tex.dispose()
+            return
+          }
           tex.colorSpace = THREE.SRGBColorSpace
           currentTexture = tex
           setTexture(tex)
+          // Notify parent that this thumbnail loaded
+          if (onThumbnailLoad) {
+            onThumbnailLoad(index)
+          }
         },
         undefined,
         (error) => {
-          console.error(`Error loading thumbnail for match ${match.matchId}:`, error)
-          setTexture(null)
+          if (isMounted) {
+            console.error(`Error loading thumbnail for match ${match.matchId}:`, error)
+            setTexture(null)
+          }
         }
       )
     } else {
@@ -116,52 +187,159 @@ function MatchTile({
     }
     
     return () => {
+      isMounted = false
       if (currentTexture) {
         currentTexture.dispose()
       }
     }
-  }, [thumbnail, match.matchId])
+  }, [thumbnail, match.matchId, index])
+  
+  // Trigger fade-in animation when tile becomes visible
+  useEffect(() => {
+    if (isVisible) {
+      // Small delay based on index for staggered effect
+      const delay = index * 30 // 30ms per index
+      const timer = setTimeout(() => {
+        setShouldAnimate(true)
+        animationStartTime.current = null // Reset for new animation
+      }, delay)
+      
+      return () => clearTimeout(timer)
+    } else {
+      setShouldAnimate(false)
+      opacityRef.current = 0
+    }
+  }, [isVisible, index])
+  
+  // Smooth fade-in animation using useFrame
+  useFrame((state, delta) => {
+    if (shouldAnimate && meshRef.current) {
+      if (animationStartTime.current === null) {
+        animationStartTime.current = state.clock.elapsedTime
+      }
+      
+      const elapsed = state.clock.elapsedTime - animationStartTime.current
+      const duration = 0.6 // 600ms in seconds
+      const progress = Math.min(elapsed / duration, 1)
+      
+      // Ease-out curve for smooth animation
+      const eased = 1 - Math.pow(1 - progress, 3)
+      opacityRef.current = eased
+      
+      // Update material opacity
+      if (meshRef.current.material) {
+        const material = meshRef.current.material as THREE.MeshStandardMaterial
+        material.opacity = opacityRef.current
+        material.needsUpdate = true
+      }
+    }
+  })
   
   // Purple gradient color
   const purpleColor = new THREE.Color(0x9333ea)
   
   return (
-    <mesh
-      ref={meshRef}
-      position={position}
-      rotation={[0, 0, 0]} // Face camera (top-down view)
-      onPointerOver={() => setHovered(true)}
-      onPointerOut={() => setHovered(false)}
-      onClick={onSelect}
-      scale={hovered ? 1.15 : 1}
-    >
-      <planeGeometry args={[2, 1.125]} />
-      {texture ? (
-        <meshStandardMaterial 
-          map={texture} 
-          side={THREE.DoubleSide}
-          transparent={false}
-          opacity={1}
-        />
-      ) : (
-        <meshStandardMaterial 
-          color={purpleColor} 
-          side={THREE.DoubleSide}
-          transparent={false}
-          opacity={1}
-        />
+    <group position={position}>
+      {/* Thumbnail plane */}
+      <mesh
+        ref={meshRef}
+        rotation={[0, 0, 0]} // Face camera (top-down view)
+        onPointerOver={() => setHovered(true)}
+        onPointerOut={() => setHovered(false)}
+        onClick={onSelect}
+        scale={hovered ? 1.15 : opacityRef.current * 0.95 + 0.05} // Scale from 0.05 to 1.0 as it fades in
+      >
+        <planeGeometry args={[2, 1.125]} />
+        {texture ? (
+          <meshStandardMaterial 
+            map={texture} 
+            side={THREE.DoubleSide}
+            transparent={true}
+            opacity={opacityRef.current}
+            emissive={new THREE.Color(0x222222)} // Add slight emissive glow
+            emissiveIntensity={0.3} // Brightness boost
+            toneMapped={true}
+          />
+        ) : (
+          <meshStandardMaterial 
+            color={purpleColor} 
+            side={THREE.DoubleSide}
+            transparent={true}
+            opacity={opacityRef.current}
+            emissive={new THREE.Color(0x4a1a7a)} // Purple emissive for fallback
+            emissiveIntensity={0.2}
+          />
+        )}
+      </mesh>
+      
+      {/* Score and team info below thumbnail using HTML overlay */}
+      {match.matchInfo && (
+        <Html
+          position={[0, -0.7, 0]}
+          center
+          transform
+          style={{
+            pointerEvents: 'none',
+            userSelect: 'none',
+            transform: 'translate3d(-50%, -50%, 0)',
+            opacity: opacityRef.current,
+            transition: 'opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
+          }}
+        >
+          <div className="bg-black/90 backdrop-blur-sm rounded px-1.5 py-0.5 flex items-center gap-0.5 text-white text-xs font-bold whitespace-nowrap shadow-lg">
+            {/* Team 1 Logo */}
+            {match.matchInfo.team1.logo && (
+              <img 
+                src={match.matchInfo.team1.logo} 
+                alt={match.matchInfo.team1.name}
+                className="w-4 h-4 object-contain"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none'
+                }}
+              />
+            )}
+            
+            {/* Team 1 Score */}
+            <span className={`text-xs ${match.matchInfo.winner === 1 ? 'text-green-400' : 'text-white'}`}>
+              {match.matchInfo.score.team1}
+            </span>
+            
+            {/* VS */}
+            <span className="text-gray-400 text-xs">:</span>
+            
+            {/* Team 2 Score */}
+            <span className={`text-xs ${match.matchInfo.winner === 2 ? 'text-green-400' : 'text-white'}`}>
+              {match.matchInfo.score.team2}
+            </span>
+            
+            {/* Team 2 Logo */}
+            {match.matchInfo.team2.logo && (
+              <img 
+                src={match.matchInfo.team2.logo} 
+                alt={match.matchInfo.team2.name}
+                className="w-4 h-4 object-contain"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none'
+                }}
+              />
+            )}
+          </div>
+        </Html>
       )}
-    </mesh>
+    </group>
   )
 }
 
 export default function MatchScene3D({ matches }: MatchScene3DProps) {
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null)
   const [selectedVOD, setSelectedVOD] = useState<VODLink | null>(null)
+  const [loadedThumbnails, setLoadedThumbnails] = useState<Set<number>>(new Set())
+  const [dateFilter, setDateFilter] = useState<'30' | '50' | '90' | 'all'>('all')
+  const [visibleMatches, setVisibleMatches] = useState<number>(0)
   
-  // Filter only YouTube VODs with embed URLs
+  // Filter only YouTube VODs with embed URLs and remove duplicates
   const youtubeMatches = useMemo(() => {
-    return matches
+    const filtered = matches
       .map(match => ({
         ...match,
         vodLinks: match.vodLinks.filter(
@@ -169,12 +347,78 @@ export default function MatchScene3D({ matches }: MatchScene3DProps) {
         )
       }))
       .filter(m => m.vodLinks.length > 0)
+    
+    // Remove duplicates based on matchId or href
+    const uniqueMatches: Match[] = []
+    const seenMatchIds = new Set<string>()
+    const seenHrefs = new Set<string>()
+    
+    for (const match of filtered) {
+      const key = match.matchId || match.href
+      
+      if (match.matchId && !seenMatchIds.has(match.matchId)) {
+        seenMatchIds.add(match.matchId)
+        uniqueMatches.push(match)
+      } else if (!match.matchId && !seenHrefs.has(match.href)) {
+        seenHrefs.add(match.href)
+        uniqueMatches.push(match)
+      }
+    }
+    
+    console.log(`Filtered to ${uniqueMatches.length} unique YouTube matches from ${matches.length} total matches (removed ${filtered.length - uniqueMatches.length} duplicates)`)
+    return uniqueMatches
   }, [matches])
   
-  // Generate positions for all matches
+  // Filter matches by date range
+  const filteredMatches = useMemo(() => {
+    if (dateFilter === 'all') {
+      return youtubeMatches
+    }
+    
+    const days = parseInt(dateFilter)
+    const cutoffDate = new Date()
+    cutoffDate.setDate(cutoffDate.getDate() - days)
+    
+    return youtubeMatches.filter(match => {
+      if (!match.date) return true // Include matches without dates
+      const matchDate = new Date(match.date)
+      return matchDate >= cutoffDate
+    })
+  }, [youtubeMatches, dateFilter])
+  
+  // Progressive rendering: show matches one by one
+  useEffect(() => {
+    if (filteredMatches.length === 0) {
+      setVisibleMatches(0)
+      return
+    }
+    
+    // Reset visible matches when filter changes
+    setVisibleMatches(0)
+    
+    // Show matches progressively
+    const interval = setInterval(() => {
+      setVisibleMatches(prev => {
+        if (prev >= filteredMatches.length) {
+          clearInterval(interval)
+          return prev
+        }
+        return prev + 1
+      })
+    }, 100) // Show one match every 100ms
+    
+    return () => clearInterval(interval)
+  }, [filteredMatches.length, dateFilter])
+  
+  // Get matches to display (progressive)
+  const matchesToDisplay = useMemo(() => {
+    return filteredMatches.slice(0, visibleMatches)
+  }, [filteredMatches, visibleMatches])
+  
+  // Generate positions for filtered matches
   const positions = useMemo(
-    () => generateMatchPositions(youtubeMatches.length),
-    [youtubeMatches.length]
+    () => generateMatchPositions(filteredMatches.length),
+    [filteredMatches.length]
   )
   
   const handleThumbnailClick = (match: Match) => {
@@ -203,10 +447,11 @@ export default function MatchScene3D({ matches }: MatchScene3DProps) {
             fov={75}
           />
           
-          {/* Lighting */}
-          <ambientLight intensity={0.6} />
-          <directionalLight position={[10, 10, 5]} intensity={0.8} />
-          <pointLight position={[-10, -10, -5]} intensity={0.4} />
+          {/* Lighting - increased for brighter thumbnails */}
+          <ambientLight intensity={0.8} />
+          <directionalLight position={[10, 10, 5]} intensity={1.2} />
+          <pointLight position={[-10, -10, -5]} intensity={0.6} />
+          <pointLight position={[0, 10, 0]} intensity={0.5} /> {/* Top light for better visibility */}
           
           {/* Camera controls - only zoom, no rotation */}
           <OrbitControls
@@ -233,43 +478,70 @@ export default function MatchScene3D({ matches }: MatchScene3DProps) {
             }}
           />
           
-          {/* Match tiles */}
-          {youtubeMatches.map((match, index) => {
+          {/* Match tiles - progressive rendering with fade-in */}
+          {matchesToDisplay.map((match, displayIndex) => {
             const firstVOD = match.vodLinks[0]
             const thumbnail = getYouTubeThumbnail(firstVOD.url)
+            // Find the original index in filteredMatches for position
+            const originalIndex = filteredMatches.findIndex(m => 
+              (m.matchId && m.matchId === match.matchId) || 
+              (!m.matchId && m.href === match.href)
+            )
             
-            // Debug logging
-            if (index < 3) {
-              console.log(`Match ${index}:`, {
-                matchId: match.matchId,
-                thumbnail,
-                vodUrl: firstVOD.url,
-                position: positions[index]
-              })
-            }
+            // Check if this match should be visible (for fade-in animation)
+            const isVisible = displayIndex < visibleMatches
             
             return (
               <MatchTile
-                key={match.matchId || index}
-                position={positions[index]}
+                key={match.matchId || displayIndex}
+                position={positions[originalIndex >= 0 ? originalIndex : displayIndex]}
                 thumbnail={thumbnail}
                 match={match}
                 onSelect={() => handleThumbnailClick(match)}
-                index={index}
+                index={originalIndex >= 0 ? originalIndex : displayIndex}
+                isVisible={isVisible}
+                onThumbnailLoad={(idx) => {
+                  setLoadedThumbnails(prev => new Set([...prev, idx]))
+                }}
               />
             )
           })}
         </Canvas>
       </div>
       
+      {/* Date filter dropdown - top right */}
+      <div className="fixed top-4 right-4 z-40">
+        <Select value={dateFilter} onValueChange={(value: '30' | '50' | '90' | 'all') => setDateFilter(value)}>
+          <SelectTrigger className="w-32 bg-white/90 backdrop-blur-sm">
+            <SelectValue placeholder="Filter by date" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All matches</SelectItem>
+            <SelectItem value="30">Last 30 days</SelectItem>
+            <SelectItem value="50">Last 50 days</SelectItem>
+            <SelectItem value="90">Last 90 days</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      
       {/* Info overlay */}
       <div className="fixed top-4 left-24 z-40 bg-white/90 backdrop-blur-sm rounded-lg px-4 py-2 shadow-lg">
         <p className="text-sm font-medium text-gray-900">
-          {youtubeMatches.length} YouTube VODs • Zoom to explore layers
+          {filteredMatches.length} matches {dateFilter !== 'all' ? `(last ${dateFilter}d)` : ''} • {matchesToDisplay.length} visible • {loadedThumbnails.size} thumbnails loaded
         </p>
         <p className="text-xs text-gray-600 mt-1">
-          First 20 matches closer • Older matches further back
+          First 20 matches closer • Older matches further back • Click and drag to pan
         </p>
+        {matchesToDisplay.length < filteredMatches.length && (
+          <p className="text-xs text-blue-600 mt-1">
+            Loading matches... ({matchesToDisplay.length} / {filteredMatches.length} shown)
+          </p>
+        )}
+        {loadedThumbnails.size < matchesToDisplay.length && (
+          <p className="text-xs text-blue-600 mt-1">
+            Loading thumbnails... ({matchesToDisplay.length - loadedThumbnails.size} remaining)
+          </p>
+        )}
       </div>
       
       {/* Embed Modal */}

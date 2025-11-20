@@ -11,11 +11,27 @@ interface MatchData {
   href: string
   html: string
   matchId?: string
+  date?: string // ISO date string
   vodLinks: Array<{
     url: string
     platform: 'youtube' | 'twitch' | 'other'
     embedUrl?: string
   }>
+  matchInfo?: {
+    team1: {
+      name: string
+      logo: string | null
+    }
+    team2: {
+      name: string
+      logo: string | null
+    }
+    score: {
+      team1: number
+      team2: number
+    }
+    winner: 1 | 2 | null
+  }
 }
 
 export default async function handler(
@@ -58,7 +74,7 @@ export default async function handler(
     // Extract match links - looking for <a> tags with href containing match IDs
     // Based on the pattern: /585458/fnatic-vs-g2-esports-red-bull-home-ground-2025-lr3
     const matchLinks: MatchLink[] = []
-    const seenHrefs = new Set<string>()
+    const seenHrefsInitial = new Set<string>()
     
     // Try multiple selectors to find match links
     // Pattern 1: Links with match ID pattern (number at start of path)
@@ -70,7 +86,7 @@ export default async function handler(
       const matchIdPattern = /^\/(\d+)\/[^\/]+/
       const match = href.match(matchIdPattern)
       
-      if (match && !seenHrefs.has(href)) {
+      if (match && !seenHrefsInitial.has(href)) {
         const matchId = match[1]
         const fullUrl = href.startsWith('http') ? href : `https://www.vlr.gg${href}`
         
@@ -79,7 +95,7 @@ export default async function handler(
           fullUrl,
           matchId
         })
-        seenHrefs.add(href)
+        seenHrefsInitial.add(href)
       }
     })
     
@@ -87,7 +103,7 @@ export default async function handler(
     if (matchLinks.length === 0) {
       $('a.wf-card, a.m-item, a[class*="match"], a[class*="wf"]').each((_, element) => {
         const href = $(element).attr('href')
-        if (!href || !href.startsWith('/') || href.includes('#') || seenHrefs.has(href)) return
+        if (!href || !href.startsWith('/') || href.includes('#') || seenHrefsInitial.has(href)) return
         
         // Check if it looks like a match URL
         if (href.match(/^\/(\d+)\//) || href.includes('-vs-')) {
@@ -100,7 +116,7 @@ export default async function handler(
             fullUrl,
             matchId
           })
-          seenHrefs.add(href)
+          seenHrefsInitial.add(href)
         }
       })
     }
@@ -109,7 +125,7 @@ export default async function handler(
     if (matchLinks.length === 0) {
       $('.mod-dark a, .m-item a, [class*="match"] a').each((_, element) => {
         const href = $(element).attr('href')
-        if (!href || !href.startsWith('/') || seenHrefs.has(href)) return
+        if (!href || !href.startsWith('/') || seenHrefsInitial.has(href)) return
         
         const matchIdMatch = href.match(/^\/(\d+)\//)
         if (matchIdMatch) {
@@ -121,21 +137,168 @@ export default async function handler(
             fullUrl,
             matchId
           })
-          seenHrefs.add(href)
+          seenHrefsInitial.add(href)
         }
       })
     }
     
     console.log(`Found ${matchLinks.length} match links using selectors`)
     
+    // Remove duplicate match links based on matchId or href
+    const uniqueMatchLinks: MatchLink[] = []
+    const seenMatchIds = new Set<string>()
+    const seenHrefs = new Set<string>()
+    
+    for (const link of matchLinks) {
+      // Use matchId as primary deduplication key, fallback to href
+      const key = link.matchId || link.href
+      
+      if (link.matchId && !seenMatchIds.has(link.matchId)) {
+        seenMatchIds.add(link.matchId)
+        uniqueMatchLinks.push(link)
+      } else if (!link.matchId && !seenHrefs.has(link.href)) {
+        seenHrefs.add(link.href)
+        uniqueMatchLinks.push(link)
+      }
+    }
+    
+    console.log(`Found ${matchLinks.length} total match links, ${uniqueMatchLinks.length} unique after deduplication`)
+    
     // Log first few match links for debugging
-    if (matchLinks.length > 0) {
-      console.log('Sample match links:', matchLinks.slice(0, 3).map(l => ({ href: l.href, matchId: l.matchId })))
+    if (uniqueMatchLinks.length > 0) {
+      console.log('Sample match links:', uniqueMatchLinks.slice(0, 3).map(l => ({ href: l.href, matchId: l.matchId })))
     } else {
       console.log('No match links found. HTML length:', html.length)
       // Log a sample of the HTML to debug
       const sampleHtml = html.substring(0, 2000)
       console.log('HTML sample:', sampleHtml)
+    }
+    
+    // Helper function to extract match date from HTML
+    const extractMatchDate = (html: string): string | undefined => {
+      const $ = cheerio.load(html)
+      
+      try {
+        // Try to find date in various common locations
+        // Look for date elements with common classes
+        const dateSelectors = [
+          '.match-header-date',
+          '.wf-label',
+          'time[datetime]',
+          '[data-date]',
+          '.match-date',
+          '.date'
+        ]
+        
+        for (const selector of dateSelectors) {
+          const dateElement = $(selector).first()
+          if (dateElement.length) {
+            // Try datetime attribute first
+            const datetime = dateElement.attr('datetime')
+            if (datetime) {
+              return new Date(datetime).toISOString()
+            }
+            
+            // Try data-date attribute
+            const dataDate = dateElement.attr('data-date')
+            if (dataDate) {
+              return new Date(dataDate).toISOString()
+            }
+            
+            // Try parsing text content
+            const text = dateElement.text().trim()
+            if (text) {
+              const parsed = new Date(text)
+              if (!isNaN(parsed.getTime())) {
+                return parsed.toISOString()
+              }
+            }
+          }
+        }
+        
+        // Fallback: try to find date in page metadata or structured data
+        const metaDate = $('meta[property="article:published_time"]').attr('content') ||
+                        $('meta[name="date"]').attr('content') ||
+                        $('time').attr('datetime')
+        
+        if (metaDate) {
+          return new Date(metaDate).toISOString()
+        }
+        
+        return undefined
+      } catch (error) {
+        console.error('Error extracting match date:', error)
+        return undefined
+      }
+    }
+
+    // Helper function to extract match info (teams, score, logos)
+    const extractMatchInfo = (html: string): MatchData['matchInfo'] | undefined => {
+      const $ = cheerio.load(html)
+      
+      try {
+        // Find team 1 info
+        const team1Link = $('.match-header-link.mod-1').first()
+        const team1Name = team1Link.find('.wf-title-med').text().trim() || 
+                         team1Link.find('img').attr('alt')?.replace(' team logo', '') || 
+                         'Team 1'
+        const team1Logo = team1Link.find('img').attr('src') || null
+        const team1LogoFull = team1Logo && !team1Logo.startsWith('http') 
+          ? `https:${team1Logo}` 
+          : team1Logo
+        
+        // Find team 2 info
+        const team2Link = $('.match-header-link.mod-2').first()
+        const team2Name = team2Link.find('.wf-title-med').text().trim() || 
+                         team2Link.find('img').attr('alt')?.replace(' team logo', '') || 
+                         'Team 2'
+        const team2Logo = team2Link.find('img').attr('src') || null
+        const team2LogoFull = team2Logo && !team2Logo.startsWith('http') 
+          ? `https:${team2Logo}` 
+          : team2Logo
+        
+        // Find score
+        const scoreContainer = $('.match-header-vs-score').first()
+        const team1Score = parseInt(scoreContainer.find('.match-header-vs-score-loser, .match-header-vs-score-winner').first().text().trim()) || 0
+        const team2Score = parseInt(scoreContainer.find('.match-header-vs-score-loser, .match-header-vs-score-winner').last().text().trim()) || 0
+        
+        // Determine winner (1 or 2)
+        let winner: 1 | 2 | null = null
+        if (team1Score > team2Score) {
+          winner = 1
+        } else if (team2Score > team1Score) {
+          winner = 2
+        }
+        
+        // Alternative: check for winner/loser classes
+        const team1Element = scoreContainer.find('.match-header-vs-score-loser, .match-header-vs-score-winner').first()
+        const team2Element = scoreContainer.find('.match-header-vs-score-loser, .match-header-vs-score-winner').last()
+        
+        if (team1Element.hasClass('match-header-vs-score-winner')) {
+          winner = 1
+        } else if (team2Element.hasClass('match-header-vs-score-winner')) {
+          winner = 2
+        }
+        
+        return {
+          team1: {
+            name: team1Name,
+            logo: team1LogoFull
+          },
+          team2: {
+            name: team2Name,
+            logo: team2LogoFull
+          },
+          score: {
+            team1: team1Score,
+            team2: team2Score
+          },
+          winner
+        }
+      } catch (error) {
+        console.error('Error extracting match info:', error)
+        return undefined
+      }
     }
     
     // Helper function to extract VOD links from match HTML
@@ -211,8 +374,8 @@ export default async function handler(
       return vodLinks
     }
     
-    // Fetch each match page (limit to first 50 matches)
-    const matchesToFetch = matchLinks.slice(0, 50)
+    // Fetch each match page (limit to first 50 matches) - use unique links
+    const matchesToFetch = uniqueMatchLinks.slice(0, 50)
     const matchData: MatchData[] = []
     
     for (const matchLink of matchesToFetch) {
@@ -227,15 +390,19 @@ export default async function handler(
         if (matchResponse.ok) {
           const matchHtml = await matchResponse.text()
           const vodLinks = extractVODLinks(matchHtml)
+          const matchInfo = extractMatchInfo(matchHtml)
+          const matchDate = extractMatchDate(matchHtml)
           
           matchData.push({
             href: matchLink.href,
             html: matchHtml,
             matchId: matchLink.matchId,
-            vodLinks
+            date: matchDate,
+            vodLinks,
+            matchInfo
           })
           
-          console.log(`Match ${matchLink.matchId}: Found ${vodLinks.length} VOD links`)
+          console.log(`Match ${matchLink.matchId}: Found ${vodLinks.length} VOD links, Date: ${matchDate || 'N/A'}, Match: ${matchInfo?.team1.name} vs ${matchInfo?.team2.name} ${matchInfo?.score.team1}:${matchInfo?.score.team2}`)
         }
       } catch (error) {
         console.error(`Error fetching match ${matchLink.href}:`, error)
@@ -251,18 +418,20 @@ export default async function handler(
       teamId,
       teamName,
       url,
-      matchLinks: matchLinks.map(link => ({
+      matchLinks: uniqueMatchLinks.map(link => ({
         href: link.href,
         fullUrl: link.fullUrl,
         matchId: link.matchId
       })),
-      matches: matchData.map(match => ({
-        href: match.href,
-        matchId: match.matchId,
-        vodLinks: match.vodLinks,
-        hasVODs: match.vodLinks.length > 0
-      })),
-      totalMatches: matchLinks.length,
+      totalMatches: uniqueMatchLinks.length,
+            matches: matchData.map(match => ({
+              href: match.href,
+              matchId: match.matchId,
+              date: match.date,
+              vodLinks: match.vodLinks,
+              hasVODs: match.vodLinks.length > 0,
+              matchInfo: match.matchInfo
+            })),
       fetchedMatches: matchData.length,
       matchesWithVODs: matchData.filter(m => m.vodLinks.length > 0).length
     })
