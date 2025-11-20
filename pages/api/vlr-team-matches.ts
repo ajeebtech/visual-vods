@@ -340,7 +340,12 @@ export default async function handler(
               // Extract timestamp if present
               const timeMatch = href.match(/[?&]t=(\d+)/)
               const timestamp = timeMatch ? timeMatch[1] : undefined
-              embedUrl = `https://www.youtube.com/embed/${videoId}${timestamp ? `?start=${timestamp}` : ''}`
+              // Add enablejsapi=1 to enable YouTube IFrame API for getting current time
+              const params = new URLSearchParams()
+              if (timestamp) params.set('start', timestamp)
+              params.set('enablejsapi', '1')
+              params.set('origin', typeof window !== 'undefined' ? window.location.origin : '')
+              embedUrl = `https://www.youtube.com/embed/${videoId}?${params.toString()}`
             }
           }
           // Check if it's a Twitch link

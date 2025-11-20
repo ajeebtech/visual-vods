@@ -134,17 +134,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(200).json(data)
       } else {
         // Get all sessions for the user
+        // RLS should filter by user_id, but we can also explicitly filter for safety
+        console.log('📥 Fetching all sessions for user:', finalUserId)
         const { data, error } = await userSupabase
           .from('sessions')
           .select('*')
+          .eq('user_id', finalUserId) // Explicitly filter by user_id
           .order('created_at', { ascending: false })
 
         if (error) {
-          console.error('Error fetching sessions:', error)
+          console.error('❌ Error fetching sessions:', error)
           return res.status(500).json({ error: error.message })
         }
 
-        return res.status(200).json(data)
+        console.log('✅ Fetched', data?.length || 0, 'sessions for user')
+        return res.status(200).json(data || [])
       }
     }
 

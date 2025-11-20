@@ -9,7 +9,10 @@ import {
     ChevronDown,
     Library,
     Disc, // Using Disc as a placeholder for the spiral icon if needed, or custom SVG
-    User
+    User,
+    Edit2,
+    Check,
+    X
 } from 'lucide-react'
 import SettingsModal from './SettingsModal'
 import AuthButton from './AuthButton'
@@ -91,6 +94,8 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
     const [sessions, setSessions] = useState<Session[]>([])
     const [isLoadingSessions, setIsLoadingSessions] = useState(false)
     const [showHistory, setShowHistory] = useState(false)
+    const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
+    const [editingTitle, setEditingTitle] = useState<string>('')
     const sidebarRef = useRef<HTMLDivElement>(null)
 
     // Debug: Log when avatarUrl changes
@@ -104,19 +109,19 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
     const { session: clerkSession } = useSession()
 
     // Fetch user profile data
-    const fetchUserProfile = async () => {
+        const fetchUserProfile = async () => {
         if (!clerkUser) return
         
-        try {
+            try {
             console.log('📥 Fetching user profile...')
             console.log('Clerk user:', { id: clerkUser.id, email: clerkUser.emailAddresses[0]?.emailAddress })
             
             // First, try to fetch from profiles table via API route (ensures JWT is sent correctly)
-            let savedUsername: string | null = null
-            let savedAvatar: string | null = null
-            
+                    let savedUsername: string | null = null
+                    let savedAvatar: string | null = null
+                    
             if (clerkSession) {
-                try {
+                    try {
                     const token = await clerkSession.getToken({ template: 'supabase' })
                     if (token) {
                         const response = await fetch('/api/profile', {
@@ -172,49 +177,49 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                             const error = await response.json()
                             console.warn('Could not fetch profile:', error)
                         }
-                    }
-                } catch (err: any) {
+                        }
+                    } catch (err: any) {
                     console.warn('Error fetching profile from API:', err)
-                }
-            }
+                        }
+                    }
 
-            // Priority order for username:
-            // 1. Saved username from profiles table
+                    // Priority order for username:
+                    // 1. Saved username from profiles table
             // 2. Clerk user's full name
             // 3. Clerk user's first name
             // 4. Email username (fallback)
-            const displayName = savedUsername || 
+                    const displayName = savedUsername || 
                               clerkUser.fullName || 
                               clerkUser.firstName || 
                               clerkUser.emailAddresses[0]?.emailAddress?.split('@')[0] || 
-                              'User Name'
-            
-            // Priority order for avatar:
-            // 1. Saved avatar from profiles table
+                                      'User Name'
+                    
+                    // Priority order for avatar:
+                    // 1. Saved avatar from profiles table
             // 2. Clerk user's image URL
-            let avatar = savedAvatar || 
+                    let avatar = savedAvatar || 
                         clerkUser.imageUrl || 
-                        null
-            
-            // If avatar is a storage path (not a full URL), convert it to a public URL
+                                null
+                    
+                    // If avatar is a storage path (not a full URL), convert it to a public URL
             if (avatar && !avatar.startsWith('http') && supabase) {
-                // It's a storage path, get the public URL
-                const { data: { publicUrl } } = supabase.storage
-                    .from('avatars')
-                    .getPublicUrl(avatar)
-                avatar = publicUrl
-            }
+                        // It's a storage path, get the public URL
+                        const { data: { publicUrl } } = supabase.storage
+                            .from('avatars')
+                            .getPublicUrl(avatar)
+                        avatar = publicUrl
+                    }
             
             console.log('📸 Setting avatar URL:', avatar)
             console.log('📸 Saved avatar from DB:', savedAvatar)
             console.log('📸 Clerk image URL:', clerkUser.imageUrl)
-            
-            setUsername(displayName)
-            setAvatarUrl(avatar)
+                    
+                    setUsername(displayName)
+                    setAvatarUrl(avatar)
             // Update avatar key to force image refresh
             if (avatar !== avatarUrl) {
                 setAvatarKey(prev => prev + 1)
-            }
+                }
             console.log('Profile loaded:', { 
                 displayName, 
                 avatar, 
@@ -222,8 +227,8 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                 clerkUserId: clerkUser.id,
                 avatarUrlState: avatar
             })
-        } catch (error) {
-            console.error('Error fetching user profile:', error)
+            } catch (error) {
+                console.error('Error fetching user profile:', error)
             // Fallback to Clerk data if API fails
             if (clerkUser) {
                 setUsername(clerkUser.fullName || clerkUser.firstName || 'User Name')
@@ -234,11 +239,11 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
 
     useEffect(() => {
         if (clerkUser && clerkSession) {
-            fetchUserProfile()
-        } else {
-            setUsername('User Name')
-            setAvatarUrl(null)
-        }
+                fetchUserProfile()
+            } else {
+                setUsername('User Name')
+                setAvatarUrl(null)
+            }
     }, [clerkUser, clerkSession])
 
     useEffect(() => {
@@ -290,7 +295,7 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
             const token = await clerkSession.getToken({ template: 'supabase' })
             
             if (!token) {
-                console.warn('No token available for fetching sessions')
+                console.warn('Could not get token for fetching sessions')
                 setIsLoadingSessions(false)
                 return
             }
@@ -306,7 +311,7 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
 
             if (response.ok) {
                 const data = await response.json()
-                console.log('📥 Fetched sessions:', data?.length || 0, 'sessions')
+                console.log('📥 Sessions fetched:', data?.length || 0, 'sessions')
                 setSessions(data || [])
             } else {
                 const error = await response.json()
@@ -322,15 +327,111 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
     // Load sessions when sidebar expands and history is shown
     useEffect(() => {
         if (isExpanded && showHistory && clerkUser && clerkSession) {
+            console.log('🔄 Fetching sessions (sidebar expanded, history shown)')
             fetchSessions()
         }
     }, [isExpanded, showHistory, clerkUser, clerkSession])
 
-    const handleLoadSession = (session: Session) => {
+    const handleLoadSession = async (session: Session) => {
+        // Don't load if we're editing
+        if (editingSessionId === session.id) return
+        
+        // Update session's updated_at timestamp to move it to recently visited
+        if (session.id && clerkSession) {
+            try {
+                const token = await clerkSession.getToken({ template: 'supabase' })
+                if (token) {
+                    // Update the session to refresh its updated_at timestamp
+                    // The database trigger will automatically update updated_at
+                    await fetch('/api/sessions', {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                            id: session.id,
+                            // Just update the matches_data to trigger the update
+                            matches_data: session.matches_data
+                        })
+                    })
+                    // Refresh sessions list to show updated order
+                    await fetchSessions()
+                }
+            } catch (error) {
+                console.error('Error updating session timestamp:', error)
+                // Continue anyway - not critical
+            }
+        }
+        
         if (onLoadSession) {
             onLoadSession(session)
             setIsExpanded(false)
             setShowHistory(false)
+        }
+    }
+
+    const handleStartEdit = (session: Session, e: React.MouseEvent) => {
+        e.stopPropagation()
+        setEditingSessionId(session.id)
+        setEditingTitle(session.title || 'Untitled Session')
+    }
+
+    const handleCancelEdit = (e?: React.MouseEvent) => {
+        if (e) e.stopPropagation()
+        setEditingSessionId(null)
+        setEditingTitle('')
+    }
+
+    const handleSaveEdit = async (session: Session, e?: React.MouseEvent) => {
+        if (e) e.stopPropagation()
+        
+        if (!clerkSession || !session.id) return
+
+        try {
+            const token = await clerkSession.getToken({ template: 'supabase' })
+            if (!token) {
+                console.error('No token available')
+                return
+            }
+
+            const response = await fetch('/api/sessions', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    id: session.id,
+                    title: editingTitle.trim() || 'Untitled Session'
+                })
+            })
+
+            if (response.ok) {
+                // Update local state
+                setSessions(sessions.map(s => 
+                    s.id === session.id 
+                        ? { ...s, title: editingTitle.trim() || 'Untitled Session' }
+                        : s
+                ))
+                setEditingSessionId(null)
+                setEditingTitle('')
+            } else {
+                const error = await response.json()
+                console.error('Error updating session title:', error)
+                alert('Failed to update session title')
+            }
+        } catch (error) {
+            console.error('Error updating session title:', error)
+            alert('Failed to update session title')
+        }
+    }
+
+    const handleKeyDown = (e: React.KeyboardEvent, session: Session) => {
+        if (e.key === 'Enter') {
+            handleSaveEdit(session)
+        } else if (e.key === 'Escape') {
+            handleCancelEdit()
         }
     }
 
@@ -340,11 +441,22 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
         const diffTime = Math.abs(now.getTime() - date.getTime())
         const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
         
-        if (diffDays === 0) return 'Today'
-        if (diffDays === 1) return 'Yesterday'
-        if (diffDays < 7) return `${diffDays} days ago`
-        if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`
-        return date.toLocaleDateString()
+        // Format date and time
+        const dateStr = date.toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric', 
+            year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined 
+        })
+        const timeStr = date.toLocaleTimeString('en-US', { 
+            hour: 'numeric', 
+            minute: '2-digit',
+            hour12: true 
+        })
+        
+        if (diffDays === 0) return `Today at ${timeStr}`
+        if (diffDays === 1) return `Yesterday at ${timeStr}`
+        if (diffDays < 7) return `${diffDays} days ago at ${timeStr}`
+        return `${dateStr} at ${timeStr}`
     }
 
     return (
@@ -366,7 +478,7 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                             exit={{ opacity: 0, x: -20 }}
                             className="text-2xl font-bold text-black whitespace-nowrap"
                         >
-                            My Spirals
+                            my sessions
                         </motion.h1>
                     )}
                 </AnimatePresence>
@@ -376,29 +488,29 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
             <div className="flex-1 flex flex-col gap-8 px-6 mt-8">
                 {/* History Icon */}
                 <div className="flex flex-col">
-                    <Tooltip
+                <Tooltip
                         content="Session history"
-                        placement="right"
-                        classNames={{
-                            content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
-                        }}
-                    >
-                        <button
+                    placement="right"
+                    classNames={{
+                        content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
+                    }}
+                >
+                    <button
                             onClick={() => {
                                 if (!isExpanded) {
                                     setIsExpanded(true)
                                 }
                                 setShowHistory(!showHistory)
                             }}
-                            className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors"
-                        >
-                            <Clock className="w-6 h-6 flex-shrink-0" />
-                            <AnimatePresence>
-                                {isExpanded && (
+                        className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors"
+                    >
+                        <Clock className="w-6 h-6 flex-shrink-0" />
+                        <AnimatePresence>
+                            {isExpanded && (
                                     <motion.div
-                                        initial={{ opacity: 0 }}
-                                        animate={{ opacity: 1 }}
-                                        exit={{ opacity: 0 }}
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
                                         className="flex items-center justify-between flex-1"
                                     >
                                         <span className="whitespace-nowrap font-medium">History</span>
@@ -406,10 +518,10 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                                             className={`w-4 h-4 transition-transform ${showHistory ? 'rotate-180' : ''}`} 
                                         />
                                     </motion.div>
-                                )}
-                            </AnimatePresence>
-                        </button>
-                    </Tooltip>
+                            )}
+                        </AnimatePresence>
+                    </button>
+                </Tooltip>
                     
                     {/* History List */}
                     <AnimatePresence>
@@ -421,28 +533,81 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                                 className="ml-10 mt-2 space-y-2 max-h-64 overflow-y-auto"
                             >
                                 {isLoadingSessions ? (
-                                    <p className="text-xs text-gray-500">Loading...</p>
+                                    <p className="text-xs text-gray-500">Loading sessions...</p>
                                 ) : sessions.length === 0 ? (
-                                    <p className="text-xs text-gray-500">No saved sessions</p>
+                                    <div className="text-xs text-gray-500">
+                                        <p>No saved sessions</p>
+                                        <button
+                                            onClick={() => fetchSessions()}
+                                            className="mt-2 text-blue-600 hover:text-blue-800 underline text-xs"
+                                        >
+                                            Refresh
+                                        </button>
+                                    </div>
                                 ) : (
                                     sessions.map((session) => (
-                                        <button
+                                        <div
                                             key={session.id}
-                                            onClick={() => handleLoadSession(session)}
-                                            className="w-full text-left p-2 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
+                                            className="w-full p-2 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200 group"
                                         >
-                                            <p className="text-sm font-medium text-gray-900 truncate">
-                                                {session.title || 'Untitled Session'}
-                                            </p>
-                                            <p className="text-xs text-gray-500 mt-1">
-                                                {formatDate(session.created_at)}
-                                            </p>
-                                            {session.matches_data && Array.isArray(session.matches_data) && (
-                                                <p className="text-xs text-gray-400 mt-1">
-                                                    {session.matches_data.length} matches
-                                                </p>
+                                            {editingSessionId === session.id ? (
+                                                // Edit mode
+                                                <div className="flex items-center gap-2">
+                                                    <input
+                                                        type="text"
+                                                        value={editingTitle}
+                                                        onChange={(e) => setEditingTitle(e.target.value)}
+                                                        onKeyDown={(e) => handleKeyDown(e, session)}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        className="flex-1 text-sm font-medium text-gray-900 px-2 py-1 border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                        autoFocus
+                                                    />
+                                                    <button
+                                                        onClick={(e) => handleSaveEdit(session, e)}
+                                                        className="p-1 text-green-600 hover:text-green-700 transition-colors"
+                                                        title="Save"
+                                                    >
+                                                        <Check className="w-4 h-4" />
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => handleCancelEdit(e)}
+                                                        className="p-1 text-red-600 hover:text-red-700 transition-colors"
+                                                        title="Cancel"
+                                                    >
+                                                        <X className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                // View mode
+                                                <div 
+                                                    onClick={() => handleLoadSession(session)}
+                                                    className="cursor-pointer"
+                                                >
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-sm font-medium text-gray-900 truncate">
+                                                                {session.title || 'Untitled Session'}
+                                                            </p>
+                                                            <p className="text-xs text-gray-500 mt-1">
+                                                                {formatDate(session.created_at)}
+                                                            </p>
+                                                            {session.matches_data && Array.isArray(session.matches_data) && (
+                                                                <p className="text-xs text-gray-400 mt-1">
+                                                                    {session.matches_data.length} matches
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                        <button
+                                                            onClick={(e) => handleStartEdit(session, e)}
+                                                            className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600 transition-all"
+                                                            title="Edit session name"
+                                                        >
+                                                            <Edit2 className="w-3 h-3" />
+                                                        </button>
+                                                    </div>
+                                                </div>
                                             )}
-                                        </button>
+                                        </div>
                                     ))
                                 )}
                             </motion.div>
@@ -594,7 +759,7 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                                         if (clerkUser?.imageUrl) {
                                             target.src = clerkUser.imageUrl
                                         } else {
-                                            target.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`
+                                        target.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`
                                         }
                                     }}
                                 />

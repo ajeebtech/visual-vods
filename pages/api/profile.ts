@@ -143,8 +143,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const profileData: {
         id: string
-        username?: string
-        avatar_url?: string
+        username?: string | null
+        avatar_url?: string | null
         updated_at: string
         created_at?: string
       } = {

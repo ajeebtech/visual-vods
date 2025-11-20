@@ -296,7 +296,7 @@ export default function SettingsModal({
         id: clerkUser.id,
         updated_at: new Date().toISOString()
       }
-
+      
       if (username !== currentUsername) {
         profileUpdates.username = username
       }
@@ -346,6 +346,10 @@ export default function SettingsModal({
       }
 
       console.log('✅ Profile updated successfully')
+      
+      // Note: Username is stored in Supabase profiles table, which is the source of truth
+      // Clerk metadata update removed as it's not needed and causes TypeScript errors
+
       setSuccess('Profile updated successfully!')
       
       // Call onUpdate callback to refresh parent component

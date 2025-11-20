@@ -8,9 +8,9 @@ export default function App({ Component, pageProps }: AppProps) {
   return (
     <ClerkProvider>
       <SupabaseProvider>
-        <HeroUIProvider>
-          <Component {...pageProps} />
-        </HeroUIProvider>
+    <HeroUIProvider>
+      <Component {...pageProps} />
+    </HeroUIProvider>
       </SupabaseProvider>
     </ClerkProvider>
   )

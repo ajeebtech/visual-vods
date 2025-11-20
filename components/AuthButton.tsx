@@ -161,28 +161,28 @@ export default function AuthButton({ isSidebarExpanded = false }: AuthButtonProp
     return (
       <AlertDialog open={showSignOutDialog} onOpenChange={setShowSignOutDialog}>
         <AlertDialogTrigger asChild>
-          <button
-            className={`w-full flex items-center ${isSidebarExpanded ? 'gap-4' : 'justify-center'} text-gray-500 hover:text-black transition-colors`}
-          >
-            <LogoutIcon className="w-6 h-6 flex-shrink-0" />
-            <AnimatePresence>
-              {isSidebarExpanded && (
-                <motion.span
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  transition={{ 
-                    type: 'spring', 
-                    stiffness: 300, 
-                    damping: 30
-                  }}
-                  className="text-sm font-medium whitespace-nowrap"
-                >
-                  Sign Out
-                </motion.span>
-              )}
-            </AnimatePresence>
-          </button>
+      <button
+        className={`w-full flex items-center ${isSidebarExpanded ? 'gap-4' : 'justify-center'} text-gray-500 hover:text-black transition-colors`}
+      >
+        <LogoutIcon className="w-6 h-6 flex-shrink-0" />
+        <AnimatePresence>
+          {isSidebarExpanded && (
+            <motion.span
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ 
+                type: 'spring', 
+                stiffness: 300, 
+                damping: 30
+              }}
+              className="text-sm font-medium whitespace-nowrap"
+            >
+              Sign Out
+            </motion.span>
+          )}
+        </AnimatePresence>
+      </button>
         </AlertDialogTrigger>
         <AlertDialogContent>
           <AlertDialogHeader>

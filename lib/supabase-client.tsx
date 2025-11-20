@@ -24,34 +24,54 @@ export default function SupabaseProvider({ children }: Props) {
   const [isLoaded, setIsLoaded] = useState(false)
 
   useEffect(() => {
-    if (!session) {
-      // Create a client without auth for unauthenticated users
+    const initializeClient = async () => {
+      if (!session) {
+        // Create a client without auth for unauthenticated users
+        const client = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        )
+        setSupabase(client)
+        setIsLoaded(true)
+        return
+      }
+
+      // Get the token first
+      let token: string | null = null
+      try {
+        token = await session.getToken({
+          template: 'supabase' // This template should be configured in Clerk Dashboard
+        })
+      } catch (error) {
+        console.error('Failed to get Clerk token:', error)
+      }
+
+      // Create client with Clerk JWT token in headers
+      const headers: Record<string, string> = {}
+      if (token) {
+        headers.Authorization = `Bearer ${token}`
+      }
+
       const client = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          global: {
+            headers
+          },
+          auth: {
+            persistSession: false, // Clerk handles session persistence
+            autoRefreshToken: false, // Clerk handles token refresh
+            detectSessionInUrl: false // Clerk handles session detection
+          }
+        }
       )
+
       setSupabase(client)
       setIsLoaded(true)
-      return
     }
 
-    // Create client without auth headers
-    // Note: For authenticated operations, we use API routes which handle JWT tokens correctly
-    // This client is primarily for storage operations and unauthenticated queries
-    const client = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        auth: {
-          persistSession: false, // Clerk handles session persistence
-          autoRefreshToken: false, // Clerk handles token refresh
-          detectSessionInUrl: false // Clerk handles session detection
-        }
-      }
-    )
-
-    setSupabase(client)
-    setIsLoaded(true)
+    initializeClient()
   }, [session])
 
   return (

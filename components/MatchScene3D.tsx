@@ -55,6 +55,7 @@ interface MatchScene3DProps {
   team2Id?: string
   tournament?: string
   playerName?: string
+  initialSessionId?: string | null
 }
 
 // Helper to get YouTube thumbnail from video ID or URL
@@ -346,18 +347,26 @@ export default function MatchScene3D({
   team2Name, 
   team2Id, 
   tournament, 
-  playerName 
+  playerName,
+  initialSessionId 
 }: MatchScene3DProps) {
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null)
   const [selectedVOD, setSelectedVOD] = useState<VODLink | null>(null)
   const [loadedThumbnails, setLoadedThumbnails] = useState<Set<number>>(new Set())
   const [dateFilter, setDateFilter] = useState<'30' | '50' | '90' | 'all'>('all')
   const [visibleMatches, setVisibleMatches] = useState<number>(0)
-  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [sessionId, setSessionId] = useState<string | null>(initialSessionId || null)
   const [isSavingSession, setIsSavingSession] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const youtubeIframeRef = useRef<HTMLIFrameElement | null>(null)
   const { session: clerkSession } = useSession()
+  
+  // Update sessionId when initialSessionId changes (when loading an old session)
+  useEffect(() => {
+    if (initialSessionId) {
+      setSessionId(initialSessionId)
+    }
+  }, [initialSessionId])
   
   // Filter only YouTube VODs with embed URLs and remove duplicates
   const youtubeMatches = useMemo(() => {
@@ -551,12 +560,15 @@ export default function MatchScene3D({
     if (!youtubeIframeRef.current || !selectedVOD?.embedUrl) return
 
     try {
-      // Extract base URL without query params
-      const baseUrl = selectedVOD.embedUrl.split('?')[0]
-      
-      // Update the iframe src with the timestamp
-      const newEmbedUrl = `${baseUrl}?start=${seconds}&autoplay=1`
-      youtubeIframeRef.current.src = newEmbedUrl
+      // Extract base URL and preserve existing params
+      const url = new URL(selectedVOD.embedUrl)
+      url.searchParams.set('start', seconds.toString())
+      url.searchParams.set('autoplay', '1')
+      url.searchParams.set('enablejsapi', '1') // Ensure API is enabled
+      if (!url.searchParams.has('origin')) {
+        url.searchParams.set('origin', window.location.origin)
+      }
+      youtubeIframeRef.current.src = url.toString()
       
       // Also try to use YouTube IFrame API if available
       if (youtubeIframeRef.current.contentWindow) {
@@ -742,7 +754,9 @@ export default function MatchScene3D({
                 {/* Embed iframe */}
                 <iframe
                   ref={youtubeIframeRef}
-                  src={selectedVOD.embedUrl}
+                  src={selectedVOD.embedUrl.includes('enablejsapi') 
+                    ? selectedVOD.embedUrl 
+                    : `${selectedVOD.embedUrl}${selectedVOD.embedUrl.includes('?') ? '&' : '?'}enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}`}
                   className="w-full h-full"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
@@ -776,6 +790,7 @@ export default function MatchScene3D({
                   matchHref={selectedMatch.href}
                   vodUrl={selectedVOD.url}
                   onTimestampClick={handleTimestampClick}
+                  youtubeIframeRef={youtubeIframeRef}
                 />
               </div>
             </motion.div>
