@@ -80,7 +80,8 @@ function generateMatchPositions(count: number): Array<[number, number, number]> 
   
   for (let i = 0; i < count; i++) {
     let attempts = 0
-    let x: number, y: number
+    let x: number = 0
+    let y: number = 0
     let validPosition = false
     
     // Try to find a position that doesn't overlap
@@ -501,7 +502,7 @@ export default function MatchScene3D({ matches }: MatchScene3DProps) {
                 index={originalIndex >= 0 ? originalIndex : displayIndex}
                 isVisible={isVisible}
                 onThumbnailLoad={(idx) => {
-                  setLoadedThumbnails(prev => new Set([...prev, idx]))
+                  setLoadedThumbnails(prev => new Set([...Array.from(prev), idx]))
                 }}
               />
             )
