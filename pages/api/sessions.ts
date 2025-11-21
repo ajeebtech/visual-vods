@@ -155,30 +155,50 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         return res.status(200).json(session)
       } else {
-        // Get all sessions for the user
-        const cacheKey = getCacheKey('sessions', finalUserId)
+        // Get sessions for the user with pagination
+        const limit = parseInt(req.query.limit as string) || 5
+        const offset = parseInt(req.query.offset as string) || 0
         
-        const sessions = await getCached(
+        const cacheKey = getCacheKey('sessions', finalUserId, limit, offset)
+        
+        const result = await getCached(
           cacheKey,
           async () => {
-            console.log('Fetching all sessions for user:', finalUserId)
+            console.log('Fetching sessions for user:', finalUserId, 'limit:', limit, 'offset:', offset)
+            
+            // Get total count
+            const { count, error: countError } = await userSupabase
+              .from('sessions')
+              .select('*', { count: 'exact', head: true })
+              .eq('user_id', finalUserId)
+
+            if (countError) {
+              console.error('Error counting sessions:', countError)
+            }
+
+            // Get paginated sessions
             const { data, error } = await userSupabase
               .from('sessions')
               .select('*')
               .eq('user_id', finalUserId) // Explicitly filter by user_id
               .order('created_at', { ascending: false })
+              .range(offset, offset + limit - 1)
 
             if (error) {
               throw error
             }
 
-            return data || []
+            return {
+              sessions: data || [],
+              hasMore: (count || 0) > offset + (data?.length || 0),
+              total: count || 0
+            }
           },
           60 // 1 minute TTL (sessions change frequently)
         )
 
-        console.log('Fetched', sessions?.length || 0, 'sessions for user')
-        return res.status(200).json(sessions)
+        console.log('Fetched', result?.sessions?.length || 0, 'sessions for user')
+        return res.status(200).json(result)
       }
     }
 

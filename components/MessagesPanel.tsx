@@ -5,6 +5,7 @@ import { useSession } from '@clerk/nextjs'
 import { User } from 'lucide-react'
 import { useSupabase } from '@/lib/supabase-client'
 import CreateGroupChatModal from './CreateGroupChatModal'
+import { getCached, setCached, getCacheKey, invalidateCache } from '@/lib/local-cache'
 
 interface Message {
   id: string
@@ -63,46 +64,32 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
   const conversationsRef = useRef<Conversation[]>([])
 
   // Local cache helpers for messages (last 50 messages)
-  const getCacheKey = (conversationId?: string, friendId?: string) => {
-    return `messages_cache_${conversationId || friendId || 'unknown'}`
+  const getMessagesCacheKey = (conversationId?: string, friendId?: string) => {
+    return getCacheKey('messages', conversationId || friendId || 'unknown')
   }
   
   const getCachedMessages = (conversationId?: string, friendId?: string): { messages: Message[], readReceipts: Record<string, string> } => {
-    if (typeof window === 'undefined') return { messages: [], readReceipts: {} }
-    try {
-      const key = getCacheKey(conversationId, friendId)
-      const cached = localStorage.getItem(key)
-      if (cached) {
-        const data: CachedMessages = JSON.parse(cached)
-        // Cache is valid for 1 hour
-        if (Date.now() - data.timestamp < 3600000) {
-          return {
-            messages: data.messages || [],
-            readReceipts: data.readReceipts || {}
-          }
-        }
+    const key = getMessagesCacheKey(conversationId, friendId)
+    const cached = getCached<CachedMessages>(key)
+    if (cached) {
+      return {
+        messages: cached.messages || [],
+        readReceipts: cached.readReceipts || {}
       }
-    } catch (error) {
-      console.error('Error reading from cache:', error)
     }
     return { messages: [], readReceipts: {} }
   }
   
   const saveCachedMessages = (messages: Message[], readReceipts: Record<string, string>, conversationId?: string, friendId?: string) => {
-    if (typeof window === 'undefined') return
-    try {
-      const key = getCacheKey(conversationId, friendId)
-      const cacheData: CachedMessages = {
-        messages: messages.slice(-50), // Only cache last 50 messages
-        readReceipts,
-        timestamp: Date.now(),
-        conversationId,
-        friendId
-      }
-      localStorage.setItem(key, JSON.stringify(cacheData))
-    } catch (error) {
-      console.error('Error saving to cache:', error)
+    const key = getMessagesCacheKey(conversationId, friendId)
+    const cacheData: CachedMessages = {
+      messages: messages.slice(-50), // Only cache last 50 messages
+      readReceipts,
+      timestamp: Date.now(),
+      conversationId,
+      friendId
     }
+    setCached(key, cacheData, 3600) // 1 hour
   }
 
   useEffect(() => {
@@ -112,6 +99,17 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
   // Fetch conversations (with optional loading state control)
   const fetchConversations = async (showLoading = false) => {
     if (!clerkSession) return
+
+    const currentUserId = clerkSession.user?.id || ''
+    const cacheKey = getCacheKey('conversations', currentUserId)
+
+    // Try cache first
+    const cached = getCached<{ conversations: Conversation[] }>(cacheKey)
+    if (cached) {
+      setConversations(cached.conversations || [])
+      conversationsRef.current = cached.conversations || []
+      return
+    }
 
     if (showLoading) {
       setIsLoading(true)
@@ -129,6 +127,8 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
       if (response.ok) {
         const data = await response.json()
         const convs = data.conversations || []
+        // Cache the result
+        setCached(cacheKey, data, 120) // 2 minutes
         setConversations(convs)
         conversationsRef.current = convs // Update ref
       }
@@ -348,6 +348,9 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
         const newMessage = await response.json()
         // Replace optimistic message with real one
         setMessages(prev => prev.map(m => m.id === tempId ? newMessage : m))
+        // Invalidate cache for this conversation
+        invalidateCache(getCacheKey('messages', selectedConversation?.conversationId || selectedFriend || 'unknown'))
+        invalidateCache(getCacheKey('conversations', currentUserId))
         // Update conversation list optimistically without full reload
         if (selectedConversation?.conversationId) {
           updateConversationInList(selectedConversation.conversationId, {

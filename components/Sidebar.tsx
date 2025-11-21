@@ -26,6 +26,7 @@ import CreateProjectModal from './CreateProjectModal'
 import EditProjectModal from './EditProjectModal'
 import { useSupabase } from '@/lib/supabase-client'
 import { useUser, useSession } from '@clerk/nextjs'
+import { getCached, setCached, getCacheKey, invalidateCache, fetchCached } from '@/lib/local-cache'
 
 // Custom Spiral Icon since Lucide might not have an exact match
 const SpiralIcon = ({ className }: { className?: string }) => (
@@ -101,6 +102,9 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
     const [avatarKey, setAvatarKey] = useState<number>(0) // Force re-render when avatar changes
     const [sessions, setSessions] = useState<Session[]>([])
     const [isLoadingSessions, setIsLoadingSessions] = useState(false)
+    const [hasMoreSessions, setHasMoreSessions] = useState(false)
+    const [sessionsOffset, setSessionsOffset] = useState(0)
+    const sessionsListRef = useRef<HTMLDivElement>(null)
     const [showHistory, setShowHistory] = useState(false)
     const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
     const [editingTitle, setEditingTitle] = useState<string>('')
@@ -160,58 +164,75 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                 try {
                     const token = await clerkSession.getToken({ template: 'supabase' })
                     if (token) {
-                        const response = await fetch('/api/profile', {
-                            method: 'GET',
-                            headers: {
-                                'Authorization': `Bearer ${token}`
-                            }
-                        })
-
-                        if (response.ok) {
-                            const result = await response.json()
-                            if (result.data) {
-                                savedUsername = result.data.username || null
-                                savedAvatar = result.data.avatar_url || null
-                                console.log('✅ Profile fetched from API:', { savedUsername, savedAvatar })
-                            } else {
-                                // Profile doesn't exist - create it automatically
-                                console.log('📝 Creating new profile for user:', clerkUser.id)
-                                const createResponse = await fetch('/api/profile', {
-                                    method: 'PUT',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'Authorization': `Bearer ${token}`
-                                    },
-                                    body: JSON.stringify({
-                                        username: clerkUser.fullName || clerkUser.firstName || null,
-                                        avatar_url: clerkUser.imageUrl || null
-                                    })
-                                })
-
-                                if (createResponse.ok) {
-                                    console.log('✅ Profile created successfully')
-                                    // Fetch the newly created profile
-                                    const fetchResponse = await fetch('/api/profile', {
-                                        method: 'GET',
-                                        headers: {
-                                            'Authorization': `Bearer ${token}`
-                                        }
-                                    })
-                                    if (fetchResponse.ok) {
-                                        const fetchResult = await fetchResponse.json()
-                                        if (fetchResult.data) {
-                                            savedUsername = fetchResult.data.username || null
-                                            savedAvatar = fetchResult.data.avatar_url || null
-                                        }
-                                    }
-                                } else {
-                                    const createError = await createResponse.json()
-                                    console.warn('Could not create profile:', createError)
-                                }
-                            }
+                        const cacheKey = getCacheKey('profile', clerkUser.id)
+                        
+                        // Try cache first
+                        const cached = getCached<{ data: { username: string | null, avatar_url: string | null } }>(cacheKey)
+                        if (cached && cached.data) {
+                            savedUsername = cached.data.username || null
+                            savedAvatar = cached.data.avatar_url || null
+                            console.log('✅ Profile fetched from cache:', { savedUsername, savedAvatar })
                         } else {
-                            const error = await response.json()
-                            console.warn('Could not fetch profile:', error)
+                            const response = await fetch('/api/profile', {
+                                method: 'GET',
+                                headers: {
+                                    'Authorization': `Bearer ${token}`
+                                }
+                            })
+
+                            if (response.ok) {
+                                const result = await response.json()
+                                // Cache the result
+                                setCached(cacheKey, result, 300) // 5 minutes
+                                
+                                if (result.data) {
+                                    savedUsername = result.data.username || null
+                                    savedAvatar = result.data.avatar_url || null
+                                    console.log('✅ Profile fetched from API:', { savedUsername, savedAvatar })
+                                } else {
+                                    // Profile doesn't exist - create it automatically
+                                    console.log('📝 Creating new profile for user:', clerkUser.id)
+                                    const createResponse = await fetch('/api/profile', {
+                                        method: 'PUT',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'Authorization': `Bearer ${token}`
+                                        },
+                                        body: JSON.stringify({
+                                            username: clerkUser.fullName || clerkUser.firstName || null,
+                                            avatar_url: clerkUser.imageUrl || null
+                                        })
+                                    })
+
+                                    if (createResponse.ok) {
+                                        console.log('✅ Profile created successfully')
+                                        // Invalidate cache
+                                        invalidateCache(getCacheKey('profile', clerkUser.id))
+                                        // Fetch the newly created profile
+                                        const fetchResponse = await fetch('/api/profile', {
+                                            method: 'GET',
+                                            headers: {
+                                                'Authorization': `Bearer ${token}`
+                                            }
+                                        })
+                                        if (fetchResponse.ok) {
+                                            const fetchResult = await fetchResponse.json()
+                                            // Cache the result
+                                            setCached(getCacheKey('profile', clerkUser.id), fetchResult, 300)
+                                            if (fetchResult.data) {
+                                                savedUsername = fetchResult.data.username || null
+                                                savedAvatar = fetchResult.data.avatar_url || null
+                                            }
+                                        }
+                                    } else {
+                                        const createError = await createResponse.json()
+                                        console.warn('Could not create profile:', createError)
+                                    }
+                                }
+                            } else {
+                                const error = await response.json()
+                                console.warn('Could not fetch profile:', error)
+                            }
                         }
                     }
                 } catch (err: any) {
@@ -300,6 +321,10 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
 
     const handleSettingsUpdate = async () => {
         console.log('🔄 Settings update triggered - refreshing profile...')
+        // Invalidate profile cache
+        if (clerkUser) {
+            invalidateCache(getCacheKey('profile', clerkUser.id))
+        }
         // Wait a moment for the database to sync
         await new Promise(resolve => setTimeout(resolve, 1000))
 
@@ -336,6 +361,16 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                 return
             }
 
+            const cacheKey = getCacheKey('projects', clerkUser.id)
+            
+            // Try cache first
+            const cached = getCached<{ projects: Array<{ id: string, name: string, description: string | null, created_at: string }> }>(cacheKey)
+            if (cached) {
+                setProjects(cached.projects || [])
+                setIsLoadingProjects(false)
+                return
+            }
+
             const response = await fetch('/api/projects', {
                 headers: {
                     'Authorization': `Bearer ${token}`
@@ -344,6 +379,8 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
 
             if (response.ok) {
                 const data = await response.json()
+                // Cache the result
+                setCached(cacheKey, data, 120) // 2 minutes
                 setProjects(data.projects || [])
             } else {
                 console.error('Error fetching projects:', response.statusText)
@@ -355,8 +392,8 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
         }
     }
 
-    // Fetch saved sessions
-    const fetchSessions = async () => {
+    // Fetch saved sessions with pagination
+    const fetchSessions = async (reset = false) => {
         if (!clerkUser || !clerkSession) {
             setIsLoadingSessions(false)
             return
@@ -372,8 +409,25 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                 return
             }
 
-            console.log('📥 Fetching sessions from API...')
-            const response = await fetch('/api/sessions', {
+            const offset = reset ? 0 : sessionsOffset
+            const limit = 5
+            const cacheKey = getCacheKey('sessions', clerkUser.id, limit, offset)
+            
+            // Try cache first (only for first page)
+            if (reset) {
+                const cached = getCached<{ sessions: Session[], hasMore: boolean, total: number }>(cacheKey)
+                if (cached) {
+                    console.log('📥 Sessions fetched from cache:', cached.sessions.length, 'sessions')
+                    setSessions(cached.sessions || [])
+                    setHasMoreSessions(cached.hasMore || false)
+                    setSessionsOffset(limit)
+                    setIsLoadingSessions(false)
+                    return
+                }
+            }
+
+            console.log('📥 Fetching sessions from API...', { limit, offset })
+            const response = await fetch(`/api/sessions?limit=${limit}&offset=${offset}`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
@@ -383,8 +437,20 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
 
             if (response.ok) {
                 const data = await response.json()
-                console.log('📥 Sessions fetched:', data?.length || 0, 'sessions')
-                setSessions(data || [])
+                // Cache the result (only for first page)
+                if (reset) {
+                    setCached(cacheKey, data, 60) // 1 minute
+                }
+                
+                if (reset) {
+                    setSessions(data.sessions || [])
+                    setSessionsOffset(limit)
+                } else {
+                    setSessions(prev => [...prev, ...(data.sessions || [])])
+                    setSessionsOffset(prev => prev + limit)
+                }
+                setHasMoreSessions(data.hasMore || false)
+                console.log('📥 Sessions fetched:', data?.sessions?.length || 0, 'sessions, hasMore:', data.hasMore)
             } else {
                 const error = await response.json()
                 console.error('❌ Error fetching sessions:', error)
@@ -400,9 +466,26 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
     useEffect(() => {
         if (isExpanded && showHistory && clerkUser && clerkSession) {
             console.log('🔄 Fetching sessions (sidebar expanded, history shown)')
-            fetchSessions()
+            fetchSessions(true) // Reset to first page
         }
     }, [isExpanded, showHistory, clerkUser, clerkSession])
+
+    // Infinite scroll for sessions list
+    useEffect(() => {
+        const sessionsListElement = sessionsListRef.current
+        if (!sessionsListElement || !hasMoreSessions || isLoadingSessions || !clerkSession) return
+
+        const handleScroll = () => {
+            const { scrollTop, scrollHeight, clientHeight } = sessionsListElement
+            // Load more when user scrolls to within 50px of bottom
+            if (scrollHeight - scrollTop - clientHeight < 50) {
+                fetchSessions(false)
+            }
+        }
+
+        sessionsListElement.addEventListener('scroll', handleScroll)
+        return () => sessionsListElement.removeEventListener('scroll', handleScroll)
+    }, [hasMoreSessions, isLoadingSessions, clerkSession, sessionsOffset])
 
     // Load projects when sidebar expands and projects section is shown
     useEffect(() => {
@@ -420,6 +503,10 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
             try {
                 const token = await clerkSession.getToken({ template: 'supabase' })
                 if (token) {
+                    // Invalidate cache
+                    if (clerkUser) {
+                        invalidateCache(getCacheKey('sessions', clerkUser.id))
+                    }
                     // Update the session to refresh its updated_at timestamp
                     // The database trigger will automatically update updated_at
                     await fetch('/api/sessions', {
@@ -434,8 +521,12 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                             matches_data: session.matches_data
                         })
                     })
-                    // Refresh sessions list to show updated order
-                    await fetchSessions()
+                    // Invalidate cache and refresh sessions list to show updated order
+                    if (clerkUser) {
+                        // Invalidate all session cache entries for this user
+                        invalidateCache(getCacheKey('sessions', clerkUser.id) + '*')
+                    }
+                    await fetchSessions(true) // Reset to first page
                 }
             } catch (error) {
                 console.error('Error updating session timestamp:', error)
@@ -469,13 +560,24 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
             return
         }
 
-        if (!clerkSession) return
+        if (!clerkSession || !clerkUser) return
 
         setIsSearching(true)
         try {
             const token = await clerkSession.getToken({ template: 'supabase' })
             if (!token) {
                 console.warn('No token available for search')
+                return
+            }
+
+            const cacheKey = getCacheKey('friends:search', clerkUser.id, query.toLowerCase())
+            
+            // Try cache first
+            const cached = getCached<{ users: Array<{ id: string, username: string, avatar_url: string | null }> }>(cacheKey)
+            if (cached) {
+                console.log('🔍 Search results from cache:', cached.users?.length || 0, 'users')
+                setSearchResults(cached.users || [])
+                setIsSearching(false)
                 return
             }
 
@@ -490,6 +592,8 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
 
             if (response.ok) {
                 const data = await response.json()
+                // Cache the result
+                setCached(cacheKey, data, 300) // 5 minutes
                 console.log('🔍 Search results:', data.users?.length || 0, 'users')
                 setSearchResults(data.users || [])
             } else {
@@ -504,12 +608,27 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
     }
 
     const fetchFriendRequests = async () => {
-        if (!clerkSession) return
+        if (!clerkSession || !clerkUser) return
 
         setIsLoadingRequests(true)
         try {
             const token = await clerkSession.getToken({ template: 'supabase' })
             if (!token) return
+
+            const cacheKey = getCacheKey('friends:requests', clerkUser.id, 'pending')
+            
+            // Try cache first
+            const cached = getCached<{ requests: Array<{
+                id: string
+                status: string
+                isRequester: boolean
+                friend: { id: string, username: string, avatar_url: string | null }
+            }> }>(cacheKey)
+            if (cached) {
+                setFriendRequests(cached.requests || [])
+                setIsLoadingRequests(false)
+                return
+            }
 
             const response = await fetch('/api/friends?action=requests&status=pending', {
                 headers: {
@@ -519,6 +638,8 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
 
             if (response.ok) {
                 const data = await response.json()
+                // Cache the result
+                setCached(cacheKey, data, 120) // 2 minutes
                 setFriendRequests(data.requests || [])
             }
         } catch (error) {
@@ -545,6 +666,11 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
             })
 
             if (response.ok) {
+                // Invalidate cache
+                if (clerkUser) {
+                    invalidateCache(getCacheKey('friends:requests', clerkUser.id, '*'))
+                    invalidateCache(getCacheKey('friends:list', clerkUser.id, '*'))
+                }
                 await fetchFriendRequests()
                 setFriendSearchQuery('')
                 setSearchResults([])
@@ -559,7 +685,7 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
     }
 
     const fetchFriendsList = async (reset = false) => {
-        if (!clerkSession) return
+        if (!clerkSession || !clerkUser) return
 
         setIsLoadingFriends(true)
         try {
@@ -567,6 +693,23 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
             if (!token) return
 
             const offset = reset ? 0 : friendsOffset
+            const cacheKey = getCacheKey('friends:list', clerkUser.id, 20, offset)
+            
+            // Try cache first (only for first page)
+            if (reset) {
+                const cached = getCached<{ friends: Array<{
+                    id: string
+                    friend: { id: string, username: string, avatar_url: string | null }
+                }>, hasMore: boolean }>(cacheKey)
+                if (cached) {
+                    setFriendsList(cached.friends || [])
+                    setFriendsOffset(20)
+                    setHasMoreFriends(cached.hasMore || false)
+                    setIsLoadingFriends(false)
+                    return
+                }
+            }
+
             const response = await fetch(`/api/friends?action=list&limit=20&offset=${offset}`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
@@ -575,6 +718,10 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
 
             if (response.ok) {
                 const data = await response.json()
+                // Cache the result (only for first page)
+                if (reset) {
+                    setCached(cacheKey, data, 120) // 2 minutes
+                }
                 if (reset) {
                     setFriendsList(data.friends || [])
                     setFriendsOffset(20)
@@ -625,6 +772,11 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
             })
 
             if (response.ok) {
+                // Invalidate cache
+                if (clerkUser) {
+                    invalidateCache(getCacheKey('friends:requests', clerkUser.id, '*'))
+                    invalidateCache(getCacheKey('friends:list', clerkUser.id, '*'))
+                }
                 await fetchFriendRequests()
                 // Refresh friends list if accepted (reset to start)
                 if (status === 'accepted') {
@@ -686,6 +838,11 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
             })
 
             if (response.ok) {
+                // Invalidate cache (all paginated results)
+                if (clerkUser) {
+                    // Invalidate all session cache entries for this user
+                    invalidateCache(getCacheKey('sessions', clerkUser.id) + '*')
+                }
                 // Update local state
                 setSessions(sessions.map(s =>
                     s.id === session.id
@@ -748,7 +905,11 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
             >
                 {/* Top Logo Area */}
                 <div className="p-6 flex items-center gap-4">
-                    <div className="w-8 h-8 bg-gradient-to-br from-gray-200 to-gray-400 rounded-full flex-shrink-0 shadow-inner" />
+                    <img 
+                        src="/logo.png" 
+                        alt="Logo" 
+                        className="w-16 h-16 flex-shrink-0 object-contain"
+                    />
                     <AnimatePresence>
                         {isExpanded && (
                             <motion.h1
@@ -806,25 +967,27 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                         <AnimatePresence>
                             {isExpanded && showHistory && (
                                 <motion.div
+                                    ref={sessionsListRef}
                                     initial={{ opacity: 0, height: 0 }}
                                     animate={{ opacity: 1, height: 'auto' }}
                                     exit={{ opacity: 0, height: 0 }}
                                     className="ml-10 mt-2 space-y-2 max-h-64 overflow-y-auto"
                                 >
-                                    {isLoadingSessions ? (
+                                    {isLoadingSessions && sessions.length === 0 ? (
                                         <p className="text-xs text-gray-500">Loading sessions...</p>
                                     ) : sessions.length === 0 ? (
                                         <div className="text-xs text-gray-500">
                                             <p>No saved sessions</p>
                                             <button
-                                                onClick={() => fetchSessions()}
+                                                onClick={() => fetchSessions(true)}
                                                 className="mt-2 text-blue-600 hover:text-blue-800 underline text-xs"
                                             >
                                                 Refresh
                                             </button>
                                         </div>
                                     ) : (
-                                        sessions.map((session) => (
+                                        <>
+                                            {sessions.map((session) => (
                                             <div
                                                 key={session.id}
                                                 className="w-full p-2 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200 group"
@@ -887,7 +1050,13 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                                                     </div>
                                                 )}
                                             </div>
-                                        ))
+                                            ))}
+                                            {isLoadingSessions && sessions.length > 0 && (
+                                                <div className="flex justify-center py-2">
+                                                    <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
+                                                </div>
+                                            )}
+                                        </>
                                     )}
                                 </motion.div>
                             )}
@@ -1376,6 +1545,10 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                 isOpen={showCreateProject}
                 onClose={() => setShowCreateProject(false)}
                 onSuccess={() => {
+                    // Invalidate cache
+                    if (clerkUser) {
+                        invalidateCache(getCacheKey('projects', clerkUser.id))
+                    }
                     fetchProjects()
                     console.log('Project created successfully')
                 }}
@@ -1390,6 +1563,10 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                 }}
                 project={selectedProject}
                 onSuccess={() => {
+                    // Invalidate cache
+                    if (clerkUser) {
+                        invalidateCache(getCacheKey('projects', clerkUser.id))
+                    }
                     fetchProjects()
                     console.log('Project updated successfully')
                 }}

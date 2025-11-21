@@ -96,7 +96,7 @@ export default function CreateGroupChatModal({ isOpen, onClose, friends, onSucce
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
-          className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col"
+          className="bg-white text-gray-900 rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col"
         >
           {/* Header */}
           <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
@@ -124,7 +124,7 @@ export default function CreateGroupChatModal({ isOpen, onClose, friends, onSucce
                 value={groupName}
                 onChange={(e) => setGroupName(e.target.value)}
                 placeholder="Enter group name..."
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-gray-900 placeholder:text-gray-400"
                 autoFocus
               />
             </div>

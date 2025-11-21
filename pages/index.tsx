@@ -4,6 +4,7 @@ import Head from 'next/head'
 import { motion, AnimatePresence } from 'framer-motion'
 import AILoadingState from '@/components/kokonutui/ai-loading'
 import SearchableSelect from '@/components/SearchableSelect'
+import { getCached, setCached, getCacheKey } from '@/lib/local-cache'
 
 // Dynamically import Scene to avoid SSR issues with Three.js
 const Scene = dynamic(() => import('../components/Scene'), {
@@ -96,6 +97,14 @@ export default function Home() {
   const fetchVLRResults = async (query: string) => {
     if (!query.trim()) return []
     
+    const cacheKey = getCacheKey('vlr:search', query.toLowerCase())
+    
+    // Try cache first
+    const cached = getCached<any[]>(cacheKey)
+    if (cached) {
+      return cached
+    }
+    
     try {
       const response = await fetch(
         `/api/vlr-search?term=${encodeURIComponent(query)}`
@@ -103,6 +112,8 @@ export default function Home() {
       if (!response.ok) return []
       
       const data = await response.json()
+      // Cache the result
+      setCached(cacheKey, data || [], 1800) // 30 minutes (same as server cache)
       return data || []
     } catch (error) {
       console.error('Error fetching from VLR.gg:', error)
@@ -241,9 +252,25 @@ export default function Home() {
             queryParams += `&team2Id=${team2Id}&team2Name=${encodeURIComponent(team2)}`
           }
           
+          // Build cache key
+          const cacheKey = getCacheKey('vlr:team-matches', team1Id, team1.toLowerCase(), team2Id || 'none', team2 ? team2.toLowerCase() : 'none')
+          
+          // Try cache first
+          const cached = getCached<any>(cacheKey)
+          if (cached) {
+            console.log('Team matches data from cache:', cached)
+            setMatchesData(cached)
+            console.log(`Found ${cached.totalMatches} total matches`)
+            console.log(`Fetched ${cached.fetchedMatches} matches`)
+            console.log(`${cached.matchesWithVODs} matches have VOD links`)
+            return
+          }
+          
           const response = await fetch(`/api/vlr-team-matches?${queryParams}`)
           if (response.ok) {
             const data = await response.json()
+            // Cache the result
+            setCached(cacheKey, data, 3600) // 1 hour (same as server cache)
             console.log('Team matches data:', data)
             setMatchesData(data)
             

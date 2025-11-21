@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useUser, useSession } from '@clerk/nextjs'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Send, MessageSquare } from 'lucide-react'
+import { getCached, setCached, getCacheKey, invalidateCache } from '@/lib/local-cache'
+import { Button } from '@heroui/button'
 
 interface Note {
   id: string
@@ -224,6 +226,15 @@ export default function NotesPanel({
   const loadNotes = async () => {
     if (!sessionId || !user || !clerkSession) return
 
+    const cacheKey = getCacheKey('notes', sessionId, matchHref, vodUrl)
+    
+    // Try cache first
+    const cached = getCached<Note[]>(cacheKey)
+    if (cached) {
+      setNotes(cached)
+      return
+    }
+
     setIsLoading(true)
     try {
       const token = await clerkSession.getToken({ template: 'supabase' })
@@ -244,6 +255,8 @@ export default function NotesPanel({
 
       if (response.ok) {
         const data = await response.json()
+        // Cache the result
+        setCached(cacheKey, data || [], 60) // 1 minute
         setNotes(data || [])
       }
     } catch (error) {
@@ -302,10 +315,20 @@ export default function NotesPanel({
           username: newNote.username || user.username || user.firstName || 'You',
           avatar_url: newNote.avatar_url || user.imageUrl || null
         }
-        setNotes([...notes, noteWithProfile].sort((a, b) => a.timestamp_seconds - b.timestamp_seconds))
+        
+        // Update local state with new note
+        const updatedNotes = [...notes, noteWithProfile].sort((a, b) => a.timestamp_seconds - b.timestamp_seconds)
+        setNotes(updatedNotes)
         setNewNoteText('')
-        // Reload notes to get fresh data with username and avatar from API
-        await loadNotes()
+        
+        // Update cache with the new note list instead of invalidating
+        const cacheKey = getCacheKey('notes', sessionId, matchHref, vodUrl)
+        setCached(cacheKey, updatedNotes, 60) // 1 minute TTL
+        
+        // Scroll to bottom to show new message
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+        }, 100)
       } else {
         const error = await response.json()
         alert(`Error: ${error.error}`)
@@ -366,12 +389,12 @@ export default function NotesPanel({
               key={note.id}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex items-start gap-3 group"
+              className="flex items-start gap-3 group p-2 rounded-lg transition-all duration-200 hover:bg-[#9146FF]/10 hover:border-l-2 hover:border-[#9146FF] hover:pl-3"
             >
               {/* Timestamp - clickable */}
               <button
                 onClick={() => onTimestampClick(note.timestamp_seconds)}
-                className="text-xs text-gray-400 hover:text-white transition-colors flex-shrink-0 min-w-[60px] text-left"
+                className="text-xs text-gray-400 group-hover:text-[#9146FF] transition-colors flex-shrink-0 min-w-[60px] text-left"
               >
                 {formatTimestamp(note.timestamp_seconds)}
               </button>
@@ -389,19 +412,19 @@ export default function NotesPanel({
                     }}
                   />
                 ) : (
-                  <div className="w-5 h-5 rounded-full bg-gray-700 flex items-center justify-center">
-                    <span className="text-xs text-gray-400">
+                  <div className="w-5 h-5 rounded-full bg-gray-700 group-hover:bg-[#9146FF]/20 flex items-center justify-center transition-colors">
+                    <span className="text-xs text-gray-400 group-hover:text-[#9146FF] transition-colors">
                       {(note.username || 'U')[0].toUpperCase()}
                     </span>
                   </div>
                 )}
-                <span className="text-xs text-gray-300">
+                <span className="text-xs text-gray-300 group-hover:text-[#9146FF] transition-colors">
                   {note.username || 'Unknown'}
                 </span>
               </div>
               
               {/* Message */}
-              <p className="text-sm text-gray-200 flex-1 break-words">
+              <p className="text-sm text-gray-200 group-hover:text-white flex-1 break-words transition-colors">
                 {note.note_text}
               </p>
             </motion.div>
@@ -433,13 +456,20 @@ export default function NotesPanel({
         />
         <div className="flex items-center justify-between">
           <p className="text-xs text-gray-500">{currentTimestamp}</p>
-          <button
-            onClick={handleAddNote}
-            disabled={!newNoteText.trim()}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          <motion.div
+            whileTap={{ scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
           >
-            <Send className="w-4 h-4" />
-          </button>
+            <Button
+              onClick={handleAddNote}
+              isDisabled={!newNoteText.trim()}
+              className="bg-[#9146FF] hover:bg-[#772CE8] text-white disabled:opacity-50 disabled:cursor-not-allowed rounded-lg"
+              size="sm"
+              startContent={<Send className="w-4 h-4" />}
+            >
+              Send
+            </Button>
+          </motion.div>
         </div>
       </div>
     </div>
