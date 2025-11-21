@@ -20,6 +20,7 @@ interface VODLink {
   url: string
   platform: 'youtube' | 'twitch' | 'other'
   embedUrl?: string
+  mapName?: string // Map name extracted from match header note
 }
 
 interface MatchInfo {
@@ -776,7 +777,7 @@ export default function MatchScene3D({
                             : 'bg-white/20 text-white hover:bg-white/30'
                         }`}
                       >
-                        YouTube {index + 1}
+                        {vod.mapName || `YouTube ${index + 1}`}
                       </button>
                     ))}
                   </div>

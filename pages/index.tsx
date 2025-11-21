@@ -233,7 +233,15 @@ export default function Home() {
       // If team1 is selected, fetch team matches
       if (team1 && team1Id) {
         try {
-          const response = await fetch(`/api/vlr-team-matches?teamId=${team1Id}&teamName=${encodeURIComponent(team1)}`)
+          // Build query parameters
+          let queryParams = `teamId=${team1Id}&teamName=${encodeURIComponent(team1)}`
+          
+          // If team2 is also provided, add it to filter matches between the two teams
+          if (team2 && team2Id) {
+            queryParams += `&team2Id=${team2Id}&team2Name=${encodeURIComponent(team2)}`
+          }
+          
+          const response = await fetch(`/api/vlr-team-matches?${queryParams}`)
           if (response.ok) {
             const data = await response.json()
             console.log('Team matches data:', data)

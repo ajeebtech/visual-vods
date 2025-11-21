@@ -8,6 +8,7 @@ interface VODLink {
   url: string
   platform: 'youtube' | 'twitch' | 'other'
   embedUrl?: string
+  mapName?: string // Map name extracted from match header note
 }
 
 interface Match {
@@ -224,7 +225,7 @@ export default function MatchGrid({ matches }: MatchGridProps) {
                           : 'bg-white/20 text-white hover:bg-white/30'
                       }`}
                     >
-                      {vod.platform === 'youtube' ? 'YouTube' : vod.platform === 'twitch' ? 'Twitch' : 'VOD'} {index + 1}
+                      {vod.mapName || (vod.platform === 'youtube' ? 'YouTube' : vod.platform === 'twitch' ? 'Twitch' : 'VOD')} {vod.mapName ? '' : index + 1}
                     </button>
                   ))}
                 </div>

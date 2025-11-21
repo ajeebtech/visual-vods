@@ -16,6 +16,7 @@
     "utils": "@/lib/utils"
   },
   "registries": {
-    "@kokonutui": "https://kokonutui.com/r/{name}.json"
+    "@kokonutui": "https://kokonutui.com/r/{name}.json",
+    "@supabase": "https://supabase.com/ui/r/{name}.json"
   }
 }

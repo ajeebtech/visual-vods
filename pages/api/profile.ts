@@ -36,11 +36,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const authResult = getAuth(req)
     const userId = authResult?.userId
     
-    console.log('🔍 Auth result from getAuth:', { userId, hasAuth: !!authResult })
+    console.log('Auth result from getAuth:', { userId, hasAuth: !!authResult })
     
     // Get the authorization token from the request
     const authHeader = req.headers.authorization
-    console.log('🔍 Authorization header present:', !!authHeader)
+    console.log('Authorization header present:', !!authHeader)
     
     if (!authHeader) {
       return res.status(401).json({ error: 'Unauthorized - no token provided' })
@@ -51,15 +51,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // If getAuth didn't work, try to verify the token with Clerk
     let finalUserId = userId
     if (!finalUserId) {
-      console.warn('⚠️ getAuth() returned no userId, trying to verify token with Clerk API')
+      console.warn('getAuth() returned no userId, trying to verify token with Clerk API')
       try {
         // Decode JWT to get user ID (JWT format: header.payload.signature)
         // The payload contains the 'sub' claim which is the user ID
         const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString())
         finalUserId = payload.sub
-        console.log('✅ Extracted userId from JWT:', finalUserId)
+        console.log('Extracted userId from JWT:', finalUserId)
       } catch (decodeError) {
-        console.error('❌ Failed to decode JWT:', decodeError)
+        console.error('Failed to decode JWT:', decodeError)
         return res.status(401).json({ 
           error: 'Unauthorized - invalid token format' 
         })
@@ -72,9 +72,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
     }
 
-    console.log('🔑 Profile API - User ID from getAuth:', userId)
-    console.log('🔑 Profile API - Token present:', !!token)
-    console.log('🔑 Profile API - Token length:', token?.length)
+    console.log('Profile API - User ID from getAuth:', userId)
+    console.log('Profile API - Token present:', !!token)
+    console.log('Profile API - Token length:', token?.length)
 
     // Create a Supabase client with the Clerk JWT token for RLS
     // This ensures auth.jwt()->>'sub' works correctly in RLS policies
@@ -119,7 +119,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // Create or update profile
       const { username, avatar_url } = req.body
 
-      console.log('📝 Profile update request:', {
+      console.log('Profile update request:', {
         username,
         avatar_url: avatar_url ? 'present' : 'null',
         userId: finalUserId
@@ -163,7 +163,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!existingProfile) {
         // INSERT new profile
         profileData.created_at = new Date().toISOString()
-        console.log('📝 Inserting profile with data:', {
+        console.log('Inserting profile with data:', {
           id: profileData.id,
           username: profileData.username,
           avatar_url: profileData.avatar_url ? 'present' : 'null'
@@ -174,18 +174,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           .from('profiles')
           .insert(profileData)
         
-        console.log('📝 Insert result:', { data, error: error ? { message: error.message, code: error.code } : null })
+        console.log('Insert result:', { data, error: error ? { message: error.message, code: error.code } : null })
         
         // If RLS fails, use service role client (but still validate user ID)
         if (error && error.code === '42501') {
-          console.log('⚠️ RLS policy violation, attempting to use service role client (with user ID validation)')
+          console.log('RLS policy violation, attempting to use service role client (with user ID validation)')
           const serviceClient = getServiceRoleClient()
           if (serviceClient) {
             // Use service client but validate that we're only inserting for the authenticated user
             const { data: serviceData, error: serviceError } = await serviceClient
               .from('profiles')
               .insert(profileData)
-            console.log('📝 Service client insert result:', { data: serviceData, error: serviceError ? { message: serviceError.message, code: serviceError.code } : null })
+            console.log('Service client insert result:', { data: serviceData, error: serviceError ? { message: serviceError.message, code: serviceError.code } : null })
             data = serviceData
             error = serviceError
           } else {
@@ -201,14 +201,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         result = { data, error }
         
         if (result.error) {
-          console.error('❌ Insert error details:', {
+          console.error('Insert error details:', {
             message: result.error.message,
             code: result.error.code,
             details: result.error.details,
             hint: result.error.hint
           })
         } else {
-          console.log('✅ Profile inserted successfully')
+          console.log('Profile inserted successfully')
         }
       } else {
         // UPDATE existing profile
@@ -227,7 +227,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         
         // If RLS fails, use service role client (but still validate user ID)
         if (error && error.code === '42501') {
-          console.log('⚠️ RLS policy violation on update, attempting to use service role client (with user ID validation)')
+          console.log('RLS policy violation on update, attempting to use service role client (with user ID validation)')
           const serviceClient = getServiceRoleClient()
           if (serviceClient) {
             const { data: serviceData, error: serviceError } = await serviceClient
@@ -250,7 +250,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         result = { data, error }
         
         if (!result.error) {
-          console.log('✅ Profile updated successfully')
+          console.log('Profile updated successfully')
         }
       }
 

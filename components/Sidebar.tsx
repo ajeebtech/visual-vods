@@ -12,10 +12,15 @@ import {
     User,
     Edit2,
     Check,
-    X
+    X,
+    UserPlus,
+    UserCheck,
+    UserX,
+    Users
 } from 'lucide-react'
 import SettingsModal from './SettingsModal'
 import AuthButton from './AuthButton'
+import MessagesPanel from './MessagesPanel'
 import { useSupabase } from '@/lib/supabase-client'
 import { useUser, useSession } from '@clerk/nextjs'
 
@@ -98,6 +103,28 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
     const [editingTitle, setEditingTitle] = useState<string>('')
     const sidebarRef = useRef<HTMLDivElement>(null)
 
+    // Friend requests state
+    const [showFriends, setShowFriends] = useState(false)
+    const [friendSearchQuery, setFriendSearchQuery] = useState('')
+    const [searchResults, setSearchResults] = useState<Array<{ id: string, username: string, avatar_url: string | null }>>([])
+    const [isSearching, setIsSearching] = useState(false)
+    const [friendRequests, setFriendRequests] = useState<Array<{
+        id: string
+        status: string
+        isRequester: boolean
+        friend: { id: string, username: string, avatar_url: string | null }
+    }>>([])
+    const [isLoadingRequests, setIsLoadingRequests] = useState(false)
+    const [friendsList, setFriendsList] = useState<Array<{
+        id: string
+        friend: { id: string, username: string, avatar_url: string | null }
+    }>>([])
+    const [isLoadingFriends, setIsLoadingFriends] = useState(false)
+    const [hasMoreFriends, setHasMoreFriends] = useState(false)
+    const [friendsOffset, setFriendsOffset] = useState(0)
+    const friendsListRef = useRef<HTMLDivElement>(null)
+    const [showMessages, setShowMessages] = useState(false)
+
     // Debug: Log when avatarUrl changes
     useEffect(() => {
         console.log('🔄 avatarUrl state changed:', avatarUrl)
@@ -109,19 +136,19 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
     const { session: clerkSession } = useSession()
 
     // Fetch user profile data
-        const fetchUserProfile = async () => {
+    const fetchUserProfile = async () => {
         if (!clerkUser) return
-        
-            try {
+
+        try {
             console.log('📥 Fetching user profile...')
             console.log('Clerk user:', { id: clerkUser.id, email: clerkUser.emailAddresses[0]?.emailAddress })
-            
+
             // First, try to fetch from profiles table via API route (ensures JWT is sent correctly)
-                    let savedUsername: string | null = null
-                    let savedAvatar: string | null = null
-                    
+            let savedUsername: string | null = null
+            let savedAvatar: string | null = null
+
             if (clerkSession) {
-                    try {
+                try {
                     const token = await clerkSession.getToken({ template: 'supabase' })
                     if (token) {
                         const response = await fetch('/api/profile', {
@@ -177,58 +204,58 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                             const error = await response.json()
                             console.warn('Could not fetch profile:', error)
                         }
-                        }
-                    } catch (err: any) {
-                    console.warn('Error fetching profile from API:', err)
-                        }
                     }
+                } catch (err: any) {
+                    console.warn('Error fetching profile from API:', err)
+                }
+            }
 
-                    // Priority order for username:
-                    // 1. Saved username from profiles table
+            // Priority order for username:
+            // 1. Saved username from profiles table
             // 2. Clerk user's full name
             // 3. Clerk user's first name
             // 4. Email username (fallback)
-                    const displayName = savedUsername || 
-                              clerkUser.fullName || 
-                              clerkUser.firstName || 
-                              clerkUser.emailAddresses[0]?.emailAddress?.split('@')[0] || 
-                                      'User Name'
-                    
-                    // Priority order for avatar:
-                    // 1. Saved avatar from profiles table
+            const displayName = savedUsername ||
+                clerkUser.fullName ||
+                clerkUser.firstName ||
+                clerkUser.emailAddresses[0]?.emailAddress?.split('@')[0] ||
+                'User Name'
+
+            // Priority order for avatar:
+            // 1. Saved avatar from profiles table
             // 2. Clerk user's image URL
-                    let avatar = savedAvatar || 
-                        clerkUser.imageUrl || 
-                                null
-                    
-                    // If avatar is a storage path (not a full URL), convert it to a public URL
+            let avatar = savedAvatar ||
+                clerkUser.imageUrl ||
+                null
+
+            // If avatar is a storage path (not a full URL), convert it to a public URL
             if (avatar && !avatar.startsWith('http') && supabase) {
-                        // It's a storage path, get the public URL
-                        const { data: { publicUrl } } = supabase.storage
-                            .from('avatars')
-                            .getPublicUrl(avatar)
-                        avatar = publicUrl
-                    }
-            
+                // It's a storage path, get the public URL
+                const { data: { publicUrl } } = supabase.storage
+                    .from('avatars')
+                    .getPublicUrl(avatar)
+                avatar = publicUrl
+            }
+
             console.log('📸 Setting avatar URL:', avatar)
             console.log('📸 Saved avatar from DB:', savedAvatar)
             console.log('📸 Clerk image URL:', clerkUser.imageUrl)
-                    
-                    setUsername(displayName)
-                    setAvatarUrl(avatar)
+
+            setUsername(displayName)
+            setAvatarUrl(avatar)
             // Update avatar key to force image refresh
             if (avatar !== avatarUrl) {
                 setAvatarKey(prev => prev + 1)
-                }
-            console.log('Profile loaded:', { 
-                displayName, 
-                avatar, 
+            }
+            console.log('Profile loaded:', {
+                displayName,
+                avatar,
                 hasAvatar: !!avatar,
                 clerkUserId: clerkUser.id,
                 avatarUrlState: avatar
             })
-            } catch (error) {
-                console.error('Error fetching user profile:', error)
+        } catch (error) {
+            console.error('Error fetching user profile:', error)
             // Fallback to Clerk data if API fails
             if (clerkUser) {
                 setUsername(clerkUser.fullName || clerkUser.firstName || 'User Name')
@@ -239,11 +266,11 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
 
     useEffect(() => {
         if (clerkUser && clerkSession) {
-                fetchUserProfile()
-            } else {
-                setUsername('User Name')
-                setAvatarUrl(null)
-            }
+            fetchUserProfile()
+        } else {
+            setUsername('User Name')
+            setAvatarUrl(null)
+        }
     }, [clerkUser, clerkSession])
 
     useEffect(() => {
@@ -266,7 +293,7 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
         console.log('🔄 Settings update triggered - refreshing profile...')
         // Wait a moment for the database to sync
         await new Promise(resolve => setTimeout(resolve, 1000))
-        
+
         // Force refresh by calling fetchUserProfile
         // Make sure we have the session before fetching
         if (clerkUser && clerkSession) {
@@ -293,7 +320,7 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
         setIsLoadingSessions(true)
         try {
             const token = await clerkSession.getToken({ template: 'supabase' })
-            
+
             if (!token) {
                 console.warn('Could not get token for fetching sessions')
                 setIsLoadingSessions(false)
@@ -335,7 +362,7 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
     const handleLoadSession = async (session: Session) => {
         // Don't load if we're editing
         if (editingSessionId === session.id) return
-        
+
         // Update session's updated_at timestamp to move it to recently visited
         if (session.id && clerkSession) {
             try {
@@ -363,7 +390,7 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                 // Continue anyway - not critical
             }
         }
-        
+
         if (onLoadSession) {
             onLoadSession(session)
             setIsExpanded(false)
@@ -383,9 +410,208 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
         setEditingTitle('')
     }
 
+    // Friend requests functions
+    const searchUsers = async (query: string) => {
+        if (!query.trim() || query.length < 2) {
+            setSearchResults([])
+            return
+        }
+
+        if (!clerkSession) return
+
+        setIsSearching(true)
+        try {
+            const token = await clerkSession.getToken({ template: 'supabase' })
+            if (!token) {
+                console.warn('No token available for search')
+                return
+            }
+
+            console.log('🔍 Searching for:', query)
+            const response = await fetch(`/api/friends?action=search&query=${encodeURIComponent(query)}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+
+            console.log('🔍 Search response status:', response.status)
+
+            if (response.ok) {
+                const data = await response.json()
+                console.log('🔍 Search results:', data.users?.length || 0, 'users')
+                setSearchResults(data.users || [])
+            } else {
+                const error = await response.json()
+                console.error('🔍 Search error:', error)
+            }
+        } catch (error) {
+            console.error('Error searching users:', error)
+        } finally {
+            setIsSearching(false)
+        }
+    }
+
+    const fetchFriendRequests = async () => {
+        if (!clerkSession) return
+
+        setIsLoadingRequests(true)
+        try {
+            const token = await clerkSession.getToken({ template: 'supabase' })
+            if (!token) return
+
+            const response = await fetch('/api/friends?action=requests&status=pending', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+
+            if (response.ok) {
+                const data = await response.json()
+                setFriendRequests(data.requests || [])
+            }
+        } catch (error) {
+            console.error('Error fetching friend requests:', error)
+        } finally {
+            setIsLoadingRequests(false)
+        }
+    }
+
+    const sendFriendRequest = async (userId: string) => {
+        if (!clerkSession) return
+
+        try {
+            const token = await clerkSession.getToken({ template: 'supabase' })
+            if (!token) return
+
+            const response = await fetch('/api/friends?action=send', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ addressee_id: userId })
+            })
+
+            if (response.ok) {
+                await fetchFriendRequests()
+                setFriendSearchQuery('')
+                setSearchResults([])
+            } else {
+                const error = await response.json()
+                alert(error.error || 'Failed to send friend request')
+            }
+        } catch (error) {
+            console.error('Error sending friend request:', error)
+            alert('Failed to send friend request')
+        }
+    }
+
+    const fetchFriendsList = async (reset = false) => {
+        if (!clerkSession) return
+
+        setIsLoadingFriends(true)
+        try {
+            const token = await clerkSession.getToken({ template: 'supabase' })
+            if (!token) return
+
+            const offset = reset ? 0 : friendsOffset
+            const response = await fetch(`/api/friends?action=list&limit=20&offset=${offset}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+
+            if (response.ok) {
+                const data = await response.json()
+                if (reset) {
+                    setFriendsList(data.friends || [])
+                    setFriendsOffset(20)
+                } else {
+                    setFriendsList(prev => [...prev, ...(data.friends || [])])
+                    setFriendsOffset(prev => prev + 20)
+                }
+                setHasMoreFriends(data.hasMore || false)
+            }
+        } catch (error) {
+            console.error('Error fetching friends list:', error)
+        } finally {
+            setIsLoadingFriends(false)
+        }
+    }
+
+    // Infinite scroll for friends list
+    useEffect(() => {
+        const friendsListElement = friendsListRef.current
+        if (!friendsListElement || !hasMoreFriends || isLoadingFriends || !clerkSession) return
+
+        const handleScroll = () => {
+            const { scrollTop, scrollHeight, clientHeight } = friendsListElement
+            // Load more when user scrolls to within 50px of bottom
+            if (scrollHeight - scrollTop - clientHeight < 50) {
+                fetchFriendsList(false)
+            }
+        }
+
+        friendsListElement.addEventListener('scroll', handleScroll)
+        return () => friendsListElement.removeEventListener('scroll', handleScroll)
+    }, [hasMoreFriends, isLoadingFriends, clerkSession, friendsOffset])
+
+    const respondToRequest = async (requestId: string, status: 'accepted' | 'rejected') => {
+        if (!clerkSession) return
+
+        try {
+            const token = await clerkSession.getToken({ template: 'supabase' })
+            if (!token) return
+
+            const response = await fetch('/api/friends?action=respond', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ request_id: requestId, status })
+            })
+
+            if (response.ok) {
+                await fetchFriendRequests()
+                // Refresh friends list if accepted (reset to start)
+                if (status === 'accepted') {
+                    await fetchFriendsList(true)
+                }
+            } else {
+                const error = await response.json()
+                alert(error.error || 'Failed to respond to friend request')
+            }
+        } catch (error) {
+            console.error('Error responding to friend request:', error)
+            alert('Failed to respond to friend request')
+        }
+    }
+
+    // Search users when query changes (debounced)
+    useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            if (friendSearchQuery) {
+                searchUsers(friendSearchQuery)
+            } else {
+                setSearchResults([])
+            }
+        }, 300)
+
+        return () => clearTimeout(timeoutId)
+    }, [friendSearchQuery, clerkSession])
+
+    // Fetch friend requests and friends list when user is logged in (preload)
+    useEffect(() => {
+        if (clerkSession) {
+            fetchFriendRequests()
+            fetchFriendsList()
+        }
+    }, [clerkSession])
+
     const handleSaveEdit = async (session: Session, e?: React.MouseEvent) => {
         if (e) e.stopPropagation()
-        
+
         if (!clerkSession || !session.id) return
 
         try {
@@ -409,8 +635,8 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
 
             if (response.ok) {
                 // Update local state
-                setSessions(sessions.map(s => 
-                    s.id === session.id 
+                setSessions(sessions.map(s =>
+                    s.id === session.id
                         ? { ...s, title: editingTitle.trim() || 'Untitled Session' }
                         : s
                 ))
@@ -440,19 +666,19 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
         const now = new Date()
         const diffTime = Math.abs(now.getTime() - date.getTime())
         const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
-        
+
         // Format date and time
-        const dateStr = date.toLocaleDateString('en-US', { 
-            month: 'short', 
-            day: 'numeric', 
-            year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined 
+        const dateStr = date.toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
         })
-        const timeStr = date.toLocaleTimeString('en-US', { 
-            hour: 'numeric', 
+        const timeStr = date.toLocaleTimeString('en-US', {
+            hour: 'numeric',
             minute: '2-digit',
-            hour12: true 
+            hour12: true
         })
-        
+
         if (diffDays === 0) return `Today at ${timeStr}`
         if (diffDays === 1) return `Yesterday at ${timeStr}`
         if (diffDays < 7) return `${diffDays} days ago at ${timeStr}`
@@ -460,345 +686,578 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
     }
 
     return (
-        <motion.div
-            ref={sidebarRef}
-            initial={{ width: '80px' }}
-            animate={{ width: isExpanded ? '400px' : '80px' }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className="fixed left-0 top-0 h-full bg-white/80 backdrop-blur-xl border-r border-gray-200 z-[100] flex flex-col overflow-hidden"
-        >
-            {/* Top Logo Area */}
-            <div className="p-6 flex items-center gap-4">
-                <div className="w-8 h-8 bg-gradient-to-br from-gray-200 to-gray-400 rounded-full flex-shrink-0 shadow-inner" />
-                <AnimatePresence>
-                    {isExpanded && (
-                        <motion.h1
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -20 }}
-                            className="text-2xl font-bold text-black whitespace-nowrap"
-                        >
-                            my sessions
-                        </motion.h1>
-                    )}
-                </AnimatePresence>
-            </div>
-
-            {/* Navigation Items */}
-            <div className="flex-1 flex flex-col gap-8 px-6 mt-8">
-                {/* History Icon */}
-                <div className="flex flex-col">
-                <Tooltip
-                        content="Session history"
-                    placement="right"
-                    classNames={{
-                        content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
-                    }}
-                >
-                    <button
-                            onClick={() => {
-                                if (!isExpanded) {
-                                    setIsExpanded(true)
-                                }
-                                setShowHistory(!showHistory)
-                            }}
-                        className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors"
-                    >
-                        <Clock className="w-6 h-6 flex-shrink-0" />
-                        <AnimatePresence>
-                            {isExpanded && (
-                                    <motion.div
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                        className="flex items-center justify-between flex-1"
-                                    >
-                                        <span className="whitespace-nowrap font-medium">History</span>
-                                        <ChevronDown 
-                                            className={`w-4 h-4 transition-transform ${showHistory ? 'rotate-180' : ''}`} 
-                                        />
-                                    </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </button>
-                </Tooltip>
-                    
-                    {/* History List */}
+        <>
+            <motion.div
+                ref={sidebarRef}
+                initial={{ width: '80px' }}
+                animate={{ width: isExpanded ? '400px' : '80px' }}
+                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                className="fixed left-0 top-0 h-full bg-white/80 backdrop-blur-xl border-r border-gray-200 z-[100] flex flex-col overflow-hidden"
+            >
+                {/* Top Logo Area */}
+                <div className="p-6 flex items-center gap-4">
+                    <div className="w-8 h-8 bg-gradient-to-br from-gray-200 to-gray-400 rounded-full flex-shrink-0 shadow-inner" />
                     <AnimatePresence>
-                        {isExpanded && showHistory && (
-                            <motion.div
-                                initial={{ opacity: 0, height: 0 }}
-                                animate={{ opacity: 1, height: 'auto' }}
-                                exit={{ opacity: 0, height: 0 }}
-                                className="ml-10 mt-2 space-y-2 max-h-64 overflow-y-auto"
+                        {isExpanded && (
+                            <motion.h1
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                className="text-2xl font-bold text-black whitespace-nowrap"
                             >
-                                {isLoadingSessions ? (
-                                    <p className="text-xs text-gray-500">Loading sessions...</p>
-                                ) : sessions.length === 0 ? (
-                                    <div className="text-xs text-gray-500">
-                                        <p>No saved sessions</p>
-                                        <button
-                                            onClick={() => fetchSessions()}
-                                            className="mt-2 text-blue-600 hover:text-blue-800 underline text-xs"
+                                my sessions
+                            </motion.h1>
+                        )}
+                    </AnimatePresence>
+                </div>
+
+                {/* Navigation Items */}
+                <div className="flex-1 flex flex-col gap-8 px-6 mt-8">
+                    {/* History Icon */}
+                    <div className="flex flex-col">
+                        <Tooltip
+                            content="Session history"
+                            placement="right"
+                            classNames={{
+                                content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
+                            }}
+                        >
+                            <button
+                                onClick={() => {
+                                    if (!isExpanded) {
+                                        setIsExpanded(true)
+                                    }
+                                    setShowHistory(!showHistory)
+                                }}
+                                className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors"
+                            >
+                                <Clock className="w-6 h-6 flex-shrink-0" />
+                                <AnimatePresence>
+                                    {isExpanded && (
+                                        <motion.div
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            exit={{ opacity: 0 }}
+                                            className="flex items-center justify-between flex-1"
                                         >
-                                            Refresh
-                                        </button>
-                                    </div>
-                                ) : (
-                                    sessions.map((session) => (
-                                        <div
-                                            key={session.id}
-                                            className="w-full p-2 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200 group"
-                                        >
-                                            {editingSessionId === session.id ? (
-                                                // Edit mode
-                                                <div className="flex items-center gap-2">
-                                                    <input
-                                                        type="text"
-                                                        value={editingTitle}
-                                                        onChange={(e) => setEditingTitle(e.target.value)}
-                                                        onKeyDown={(e) => handleKeyDown(e, session)}
-                                                        onClick={(e) => e.stopPropagation()}
-                                                        className="flex-1 text-sm font-medium text-gray-900 px-2 py-1 border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                        autoFocus
-                                                    />
-                                                    <button
-                                                        onClick={(e) => handleSaveEdit(session, e)}
-                                                        className="p-1 text-green-600 hover:text-green-700 transition-colors"
-                                                        title="Save"
-                                                    >
-                                                        <Check className="w-4 h-4" />
-                                                    </button>
-                                                    <button
-                                                        onClick={(e) => handleCancelEdit(e)}
-                                                        className="p-1 text-red-600 hover:text-red-700 transition-colors"
-                                                        title="Cancel"
-                                                    >
-                                                        <X className="w-4 h-4" />
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                // View mode
-                                                <div 
-                                                    onClick={() => handleLoadSession(session)}
-                                                    className="cursor-pointer"
-                                                >
-                                                    <div className="flex items-start justify-between gap-2">
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="text-sm font-medium text-gray-900 truncate">
-                                                                {session.title || 'Untitled Session'}
-                                                            </p>
-                                                            <p className="text-xs text-gray-500 mt-1">
-                                                                {formatDate(session.created_at)}
-                                                            </p>
-                                                            {session.matches_data && Array.isArray(session.matches_data) && (
-                                                                <p className="text-xs text-gray-400 mt-1">
-                                                                    {session.matches_data.length} matches
-                                                                </p>
-                                                            )}
-                                                        </div>
+                                            <span className="whitespace-nowrap font-medium">History</span>
+                                            <ChevronDown
+                                                className={`w-4 h-4 transition-transform ${showHistory ? 'rotate-180' : ''}`}
+                                            />
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </button>
+                        </Tooltip>
+
+                        {/* History List */}
+                        <AnimatePresence>
+                            {isExpanded && showHistory && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    className="ml-10 mt-2 space-y-2 max-h-64 overflow-y-auto"
+                                >
+                                    {isLoadingSessions ? (
+                                        <p className="text-xs text-gray-500">Loading sessions...</p>
+                                    ) : sessions.length === 0 ? (
+                                        <div className="text-xs text-gray-500">
+                                            <p>No saved sessions</p>
+                                            <button
+                                                onClick={() => fetchSessions()}
+                                                className="mt-2 text-blue-600 hover:text-blue-800 underline text-xs"
+                                            >
+                                                Refresh
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        sessions.map((session) => (
+                                            <div
+                                                key={session.id}
+                                                className="w-full p-2 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200 group"
+                                            >
+                                                {editingSessionId === session.id ? (
+                                                    // Edit mode
+                                                    <div className="flex items-center gap-2">
+                                                        <input
+                                                            type="text"
+                                                            value={editingTitle}
+                                                            onChange={(e) => setEditingTitle(e.target.value)}
+                                                            onKeyDown={(e) => handleKeyDown(e, session)}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            className="flex-1 text-sm font-medium text-gray-900 px-2 py-1 border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                            autoFocus
+                                                        />
                                                         <button
-                                                            onClick={(e) => handleStartEdit(session, e)}
-                                                            className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600 transition-all"
-                                                            title="Edit session name"
+                                                            onClick={(e) => handleSaveEdit(session, e)}
+                                                            className="p-1 text-green-600 hover:text-green-700 transition-colors"
+                                                            title="Save"
                                                         >
-                                                            <Edit2 className="w-3 h-3" />
+                                                            <Check className="w-4 h-4" />
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => handleCancelEdit(e)}
+                                                            className="p-1 text-red-600 hover:text-red-700 transition-colors"
+                                                            title="Cancel"
+                                                        >
+                                                            <X className="w-4 h-4" />
                                                         </button>
                                                     </div>
+                                                ) : (
+                                                    // View mode
+                                                    <div
+                                                        onClick={() => handleLoadSession(session)}
+                                                        className="cursor-pointer"
+                                                    >
+                                                        <div className="flex items-start justify-between gap-2">
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-sm font-medium text-gray-900 truncate">
+                                                                    {session.title || 'Untitled Session'}
+                                                                </p>
+                                                                <p className="text-xs text-gray-500 mt-1">
+                                                                    {formatDate(session.created_at)}
+                                                                </p>
+                                                                {session.matches_data && Array.isArray(session.matches_data) && (
+                                                                    <p className="text-xs text-gray-400 mt-1">
+                                                                        {session.matches_data.length} matches
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                            <button
+                                                                onClick={(e) => handleStartEdit(session, e)}
+                                                                className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600 transition-all"
+                                                                title="Edit session name"
+                                                            >
+                                                                <Edit2 className="w-3 h-3" />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))
+                                    )}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+
+                    {/* Friends Icon */}
+                    <div className="flex flex-col">
+                        <Tooltip
+                            content="Friends"
+                            placement="right"
+                            classNames={{
+                                content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
+                            }}
+                        >
+                            <button
+                                onClick={() => {
+                                    if (!isExpanded) {
+                                        setIsExpanded(true)
+                                    }
+                                    setShowFriends(!showFriends)
+                                }}
+                                className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors"
+                            >
+                                <Users className="w-6 h-6 flex-shrink-0" />
+                                <AnimatePresence>
+                                    {isExpanded && (
+                                        <motion.div
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            exit={{ opacity: 0 }}
+                                            className="flex items-center justify-between flex-1"
+                                        >
+                                            <span className="whitespace-nowrap font-medium">Friends</span>
+                                            <ChevronDown
+                                                className={`w-4 h-4 transition-transform ${showFriends ? 'rotate-180' : ''}`}
+                                            />
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </button>
+                        </Tooltip>
+
+                        {/* Friends Section */}
+                        <AnimatePresence>
+                            {isExpanded && showFriends && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    className="ml-10 mt-2 space-y-4"
+                                >
+                                    {/* Search for users */}
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-medium text-gray-700">Search Users</label>
+                                        <div className="relative">
+                                            <input
+                                                type="text"
+                                                value={friendSearchQuery}
+                                                onChange={(e) => setFriendSearchQuery(e.target.value)}
+                                                placeholder="Search by username..."
+                                                className="w-full px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            />
+                                            {isSearching && (
+                                                <div className="absolute right-3 top-2.5">
+                                                    <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
                                                 </div>
                                             )}
                                         </div>
-                                    ))
+
+                                        {/* Search Results */}
+                                        {friendSearchQuery.length >= 2 && (
+                                            <div className="space-y-1 max-h-32 overflow-y-auto">
+                                                {isSearching ? (
+                                                    <p className="text-xs text-gray-500 py-2">Searching...</p>
+                                                ) : searchResults.length > 0 ? (
+                                                    searchResults.map((user) => (
+                                                        <div
+                                                            key={user.id}
+                                                            className="flex items-center justify-between p-2 bg-gray-50 rounded-lg hover:bg-gray-100"
+                                                        >
+                                                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                                {user.avatar_url ? (
+                                                                    <img
+                                                                        src={user.avatar_url}
+                                                                        alt={user.username}
+                                                                        className="w-6 h-6 rounded-full object-cover"
+                                                                    />
+                                                                ) : (
+                                                                    <div className="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center">
+                                                                        <User className="w-4 h-4 text-gray-600" />
+                                                                    </div>
+                                                                )}
+                                                                <span className="text-sm font-medium text-gray-900 truncate">
+                                                                    {user.username}
+                                                                </span>
+                                                            </div>
+                                                            <button
+                                                                onClick={() => sendFriendRequest(user.id)}
+                                                                className="p-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors"
+                                                                title="Send friend request"
+                                                            >
+                                                                <UserPlus className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    ))
+                                                ) : (
+                                                    <p className="text-xs text-gray-500 py-2">
+                                                        No users found. Make sure the user has set a username in their profile.
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Friends List */}
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <label className="text-xs font-medium text-gray-700">My Friends</label>
+                                            {friendsList.length > 0 && (
+                                                <span className="text-xs text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">
+                                                    {friendsList.length}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {isLoadingFriends ? (
+                                            <p className="text-xs text-gray-500">Loading...</p>
+                                        ) : friendsList.length === 0 ? (
+                                            <p className="text-xs text-gray-500">No friends yet</p>
+                                        ) : (
+                                            <div
+                                                ref={friendsListRef}
+                                                className="space-y-2 max-h-48 overflow-y-auto"
+                                            >
+                                                {friendsList.map((friend) => (
+                                                    <div
+                                                        key={friend.id}
+                                                        className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100"
+                                                    >
+                                                        {friend.friend.avatar_url ? (
+                                                            <img
+                                                                src={friend.friend.avatar_url}
+                                                                alt={friend.friend.username}
+                                                                className="w-6 h-6 rounded-full object-cover"
+                                                            />
+                                                        ) : (
+                                                            <div className="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center">
+                                                                <User className="w-4 h-4 text-gray-600" />
+                                                            </div>
+                                                        )}
+                                                        <span className="text-sm font-medium text-gray-900 truncate flex-1">
+                                                            {friend.friend.username}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                                {isLoadingFriends && (
+                                                    <div className="flex justify-center py-2">
+                                                        <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Friend Requests */}
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <label className="text-xs font-medium text-gray-700">Friend Requests</label>
+                                            {friendRequests.length > 0 && (
+                                                <span className="text-xs text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">
+                                                    {friendRequests.length}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {isLoadingRequests ? (
+                                            <p className="text-xs text-gray-500">Loading...</p>
+                                        ) : friendRequests.length === 0 ? (
+                                            <p className="text-xs text-gray-500">No pending requests</p>
+                                        ) : (
+                                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                                                {friendRequests.map((request) => (
+                                                    <div
+                                                        key={request.id}
+                                                        className="flex items-center justify-between p-2 bg-gray-50 rounded-lg"
+                                                    >
+                                                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                            {request.friend.avatar_url ? (
+                                                                <img
+                                                                    src={request.friend.avatar_url}
+                                                                    alt={request.friend.username}
+                                                                    className="w-6 h-6 rounded-full object-cover"
+                                                                />
+                                                            ) : (
+                                                                <div className="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center">
+                                                                    <User className="w-4 h-4 text-gray-600" />
+                                                                </div>
+                                                            )}
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-sm font-medium text-gray-900 truncate">
+                                                                    {request.friend.username}
+                                                                </p>
+                                                                <p className="text-xs text-gray-500">
+                                                                    {request.isRequester ? 'Sent' : 'Received'}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        {!request.isRequester && (
+                                                            <div className="flex items-center gap-1">
+                                                                <button
+                                                                    onClick={() => respondToRequest(request.id, 'accepted')}
+                                                                    className="p-1.5 text-green-600 hover:text-green-700 hover:bg-green-50 rounded transition-colors"
+                                                                    title="Accept"
+                                                                >
+                                                                    <UserCheck className="w-4 h-4" />
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => respondToRequest(request.id, 'rejected')}
+                                                                    className="p-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                                                                    title="Reject"
+                                                                >
+                                                                    <UserX className="w-4 h-4" />
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+
+                    {/* Curate Session Icon */}
+                    <Tooltip
+                        content="Curate a session"
+                        placement="right"
+                        classNames={{
+                            content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
+                        }}
+                    >
+                        <button className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors">
+                            <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
+                                <CurateSessionIcon className="w-6 h-6" />
+                            </div>
+                            <AnimatePresence>
+                                {isExpanded && (
+                                    <motion.span
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        className="whitespace-nowrap font-medium"
+                                    >
+                                        Curate a session
+                                    </motion.span>
                                 )}
+                            </AnimatePresence>
+                        </button>
+                    </Tooltip>
+
+                    {/* Expanded Content Area */}
+                    <AnimatePresence>
+                        {isExpanded && (
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="mt-4 flex-1 flex flex-col"
+                            >
+                                {/* Controls */}
+                                <div className="flex items-center justify-between mb-8 text-sm text-gray-600">
+                                    <button className="flex items-center gap-2 hover:text-black">
+                                        <Search className="w-4 h-4" />
+                                        Find
+                                    </button>
+                                    <button className="flex items-center gap-1 hover:text-black">
+                                        Sort
+                                        <AlignLeft className="w-4 h-4 rotate-180" />
+                                    </button>
+                                </div>
+
+                                {/* Empty State */}
+                                <div className="flex-1 flex flex-col items-center justify-center text-center text-gray-500">
+                                    <h3 className="text-lg font-medium text-black mb-2">No saved spirals yet</h3>
+                                    <p className="text-sm max-w-[200px]">
+                                        Save your favorite spirals to access them quickly here.
+                                    </p>
+                                </div>
                             </motion.div>
                         )}
                     </AnimatePresence>
                 </div>
 
-                {/* Messaging Icon */}
-                <Tooltip
-                    content="Messages"
-                    placement="right"
-                    classNames={{
-                        content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
-                    }}
-                >
-                    <button className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors">
-                        <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
-                            <MessagingIcon className="w-6 h-6" />
-                        </div>
-                        <AnimatePresence>
-                            {isExpanded && (
-                                <motion.span
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    className="whitespace-nowrap font-medium"
-                                >
-                                    Messages
-                                </motion.span>
-                            )}
-                        </AnimatePresence>
-                    </button>
-                </Tooltip>
-
-                {/* Curate Session Icon */}
-                <Tooltip
-                    content="Curate a session"
-                    placement="right"
-                    classNames={{
-                        content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
-                    }}
-                >
-                    <button className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors">
-                        <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
-                            <CurateSessionIcon className="w-6 h-6" />
-                        </div>
-                        <AnimatePresence>
-                            {isExpanded && (
-                                <motion.span
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    className="whitespace-nowrap font-medium"
-                                >
-                                    Curate a session
-                                </motion.span>
-                            )}
-                        </AnimatePresence>
-                    </button>
-                </Tooltip>
-
-                {/* Expanded Content Area */}
-                <AnimatePresence>
-                    {isExpanded && (
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="mt-4 flex-1 flex flex-col"
-                        >
-                            {/* Controls */}
-                            <div className="flex items-center justify-between mb-8 text-sm text-gray-600">
-                                <button className="flex items-center gap-2 hover:text-black">
-                                    <Search className="w-4 h-4" />
-                                    Find
-                                </button>
-                                <button className="flex items-center gap-1 hover:text-black">
-                                    Sort
-                                    <AlignLeft className="w-4 h-4 rotate-180" />
-                                </button>
-                            </div>
-
-                            {/* Empty State */}
-                            <div className="flex-1 flex flex-col items-center justify-center text-center text-gray-500">
-                                <h3 className="text-lg font-medium text-black mb-2">No saved spirals yet</h3>
-                                <p className="text-sm max-w-[200px]">
-                                    Save your favorite spirals to access them quickly here.
-                                </p>
-                            </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-            </div>
-
-            {/* Bottom Actions */}
-            <div className="p-6 flex flex-col gap-6">
-                <Tooltip
-                    content="Settings"
-                    placement="right"
-                    classNames={{
-                        content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
-                    }}
-                >
-                    <button 
-                        onClick={() => setIsSettingsOpen(true)}
-                        className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors"
+                {/* Bottom Actions */}
+                <div className="p-6 flex flex-col gap-6">
+                    <Tooltip
+                        content="Settings"
+                        placement="right"
+                        classNames={{
+                            content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
+                        }}
                     >
-                        <Settings className="w-6 h-6 flex-shrink-0" />
-                        <AnimatePresence>
-                            {isExpanded && (
-                                <motion.span
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    className="whitespace-nowrap font-medium"
-                                >
-                                    Settings
-                                </motion.span>
-                            )}
-                        </AnimatePresence>
-                    </button>
-                </Tooltip>
+                        <button
+                            onClick={() => setIsSettingsOpen(true)}
+                            className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors"
+                        >
+                            <Settings className="w-6 h-6 flex-shrink-0" />
+                            <AnimatePresence>
+                                {isExpanded && (
+                                    <motion.span
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        className="whitespace-nowrap font-medium"
+                                    >
+                                        Settings
+                                    </motion.span>
+                                )}
+                            </AnimatePresence>
+                        </button>
+                    </Tooltip>
 
-                <Tooltip
-                    content="Profile"
-                    placement="right"
-                    classNames={{
-                        content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
-                    }}
-                >
-                    <button className="flex items-center gap-4">
-                        <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 flex-shrink-0 border-2 border-gray-300 relative">
-                            {avatarUrl ? (
-                                <img
-                                    key={`avatar-${avatarUrl}-${avatarKey}`}
-                                    src={`${avatarUrl}${avatarUrl.includes('?') ? '&' : '?'}_t=${avatarKey}`}
-                                    alt="Profile"
-                                    className="w-full h-full object-cover block"
-                                    style={{ display: 'block' }}
-                                    onLoad={() => {
-                                        console.log('✅ Profile image loaded successfully in sidebar:', avatarUrl)
-                                    }}
-                                    onError={(e) => {
-                                        // Fallback to default avatar if image fails to load
-                                        console.error('❌ Profile image failed to load:', avatarUrl)
-                                        console.error('Image error details:', e)
-                                        const target = e.target as HTMLImageElement
-                                        // Try Clerk image first, then fallback to generated avatar
-                                        if (clerkUser?.imageUrl) {
-                                            target.src = clerkUser.imageUrl
-                                        } else {
-                                        target.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`
-                                        }
-                                    }}
-                                />
-                            ) : (
-                                <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                                    <User className="w-5 h-5 text-gray-400" />
-                                </div>
-                            )}
-                        </div>
-                        <AnimatePresence>
-                            {isExpanded && (
-                                <motion.div
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    className="text-left"
-                                >
-                                    <div className="text-sm font-medium text-black">{username}</div>
-                                    <div className="text-xs text-gray-500">View Profile</div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </button>
-                </Tooltip>
+                    <Tooltip
+                        content="Profile"
+                        placement="right"
+                        classNames={{
+                            content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
+                        }}
+                    >
+                        <button className="flex items-center gap-4">
+                            <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 flex-shrink-0 border-2 border-gray-300 relative">
+                                {avatarUrl ? (
+                                    <img
+                                        key={`avatar-${avatarUrl}-${avatarKey}`}
+                                        src={`${avatarUrl}${avatarUrl.includes('?') ? '&' : '?'}_t=${avatarKey}`}
+                                        alt="Profile"
+                                        className="w-full h-full object-cover block"
+                                        style={{ display: 'block' }}
+                                        onLoad={() => {
+                                            console.log('✅ Profile image loaded successfully in sidebar:', avatarUrl)
+                                        }}
+                                        onError={(e) => {
+                                            // Fallback to default avatar if image fails to load
+                                            console.error('❌ Profile image failed to load:', avatarUrl)
+                                            console.error('Image error details:', e)
+                                            const target = e.target as HTMLImageElement
+                                            // Try Clerk image first, then fallback to generated avatar
+                                            if (clerkUser?.imageUrl) {
+                                                target.src = clerkUser.imageUrl
+                                            } else {
+                                                target.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`
+                                            }
+                                        }}
+                                    />
+                                ) : (
+                                    <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                                        <User className="w-5 h-5 text-gray-400" />
+                                    </div>
+                                )}
+                            </div>
+                            <AnimatePresence>
+                                {isExpanded && (
+                                    <motion.div
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        className="text-left"
+                                    >
+                                        <div className="text-sm font-medium text-black">{username}</div>
+                                        <div className="text-xs text-gray-500">View Profile</div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </button>
+                    </Tooltip>
 
-                {/* Auth Button */}
-                <div className="pt-4 border-t border-gray-200">
-                    <AuthButton isSidebarExpanded={isExpanded} />
+                    {/* Auth Button */}
+                    <div className="pt-4 border-t border-gray-200">
+                        <AuthButton isSidebarExpanded={isExpanded} />
+                    </div>
                 </div>
-            </div>
 
-            {/* Settings Modal - rendered via portal at body level */}
-            <SettingsModal
-                isOpen={isSettingsOpen}
-                onClose={() => setIsSettingsOpen(false)}
-                currentUsername={username}
-                currentAvatarUrl={avatarUrl || undefined}
-                onUpdate={handleSettingsUpdate}
-            />
-        </motion.div>
+                {/* Settings Modal - rendered via portal at body level */}
+                <SettingsModal
+                    isOpen={isSettingsOpen}
+                    onClose={() => setIsSettingsOpen(false)}
+                    currentUsername={username}
+                    currentAvatarUrl={avatarUrl || undefined}
+                    onUpdate={handleSettingsUpdate}
+                />
+            </motion.div>
+
+            {/* Floating Messages Button - Bottom Right */}
+            <motion.button
+                onClick={() => setShowMessages(true)}
+                initial={{ scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                className="fixed bottom-6 right-6 w-14 h-14 bg-white text-gray-900 rounded-full shadow-lg hover:shadow-xl flex items-center justify-center z-[9998] transition-all duration-200 border border-gray-200"
+                aria-label="Open Messages"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" className="w-6 h-6">
+                    <rect width="256" height="256" fill="none" />
+                    <line x1="108" y1="148" x2="160" y2="96" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16" />
+                    <path d="M223.69,42.18a8,8,0,0,0-9.87-9.87l-192,58.22a8,8,0,0,0-1.25,14.93L108,148l42.54,87.42a8,8,0,0,0,14.93-1.25Z" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16" />
+                </svg>
+            </motion.button>
+
+            {/* Messages Panel - rendered outside sidebar */}
+            <AnimatePresence>
+                {showMessages && (
+                    <MessagesPanel
+                        friends={friendsList}
+                        onClose={() => setShowMessages(false)}
+                    />
+                )}
+            </AnimatePresence>
+        </>
     )
 }

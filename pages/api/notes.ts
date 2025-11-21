@@ -19,11 +19,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Attempt to get Clerk user from request using clerkMiddleware
     const authResult = getAuth(req)
     finalUserId = authResult?.userId
-    console.log('🔍 Notes API - Auth result from getAuth:', { userId: finalUserId, hasAuth: !!authResult })
-
+    console.log('Notes API - Auth result from getAuth:', { userId: finalUserId, hasAuth: !!authResult })
+    
     // If getAuth() didn't return a userId, try to decode the JWT manually
     if (!finalUserId) {
-      console.warn('⚠️ getAuth() returned no userId, trying to decode JWT manually')
+      console.warn('getAuth() returned no userId, trying to decode JWT manually')
       const authHeader = req.headers.authorization
       if (authHeader) {
         token = authHeader.replace('Bearer ', '')
@@ -31,12 +31,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           // Decode the token to get the user ID (sub claim)
           const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString())
           finalUserId = payload.sub
-          console.log('✅ Extracted userId from JWT:', finalUserId)
+          console.log('Extracted userId from JWT:', finalUserId)
         } catch (jwtError) {
-          console.error('❌ Failed to decode JWT:', jwtError)
+          console.error('Failed to decode JWT:', jwtError)
         }
       } else {
-        console.warn('⚠️ No Authorization header found for manual JWT decoding.')
+        console.warn('No Authorization header found for manual JWT decoding.')
       }
     }
 
@@ -53,8 +53,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       token = authHeader.replace('Bearer ', '')
     }
 
-    console.log('🔑 Notes API - Final User ID:', finalUserId)
-    console.log('🔑 Notes API - Token present:', !!token)
+    console.log('Notes API - Final User ID:', finalUserId)
+    console.log('Notes API - Token present:', !!token)
 
     // Create a Supabase client with the Clerk JWT token for RLS
     // This ensures auth.jwt()->>'sub' works correctly in RLS policies

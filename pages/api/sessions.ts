@@ -18,11 +18,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const authResult = getAuth(req)
     const userId = authResult?.userId
     
-    console.log('🔍 Sessions API - Auth result from getAuth:', { userId, hasAuth: !!authResult })
+    console.log('Sessions API - Auth result from getAuth:', { userId, hasAuth: !!authResult })
     
     // Get the authorization token from the request
     const authHeader = req.headers.authorization
-    console.log('🔍 Sessions API - Authorization header present:', !!authHeader)
+    console.log('Sessions API - Authorization header present:', !!authHeader)
     
     if (!authHeader) {
       return res.status(401).json({ error: 'Unauthorized - no token provided' })
@@ -33,15 +33,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // If getAuth didn't work, try to verify the token with Clerk
     let finalUserId = userId
     if (!finalUserId) {
-      console.warn('⚠️ getAuth() returned no userId, trying to verify token with Clerk API')
+      console.warn('getAuth() returned no userId, trying to verify token with Clerk API')
       try {
         // Decode JWT to get user ID (JWT format: header.payload.signature)
         // The payload contains the 'sub' claim which is the user ID
         const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString())
         finalUserId = payload.sub
-        console.log('✅ Extracted userId from JWT:', finalUserId)
+        console.log('Extracted userId from JWT:', finalUserId)
       } catch (decodeError) {
-        console.error('❌ Failed to decode JWT:', decodeError)
+        console.error('Failed to decode JWT:', decodeError)
         return res.status(401).json({ 
           error: 'Unauthorized - invalid token format' 
         })
@@ -54,9 +54,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
     }
 
-    console.log('🔑 Sessions API - User ID:', finalUserId)
-    console.log('🔑 Sessions API - Token present:', !!token)
-    console.log('🔑 Sessions API - Token length:', token?.length)
+    console.log('Sessions API - User ID:', finalUserId)
+    console.log('Sessions API - Token present:', !!token)
+    console.log('Sessions API - Token length:', token?.length)
 
     // Create a Supabase client with the Clerk JWT token for RLS
     // This ensures auth.jwt()->>'sub' works correctly in RLS policies
@@ -135,7 +135,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       } else {
         // Get all sessions for the user
         // RLS should filter by user_id, but we can also explicitly filter for safety
-        console.log('📥 Fetching all sessions for user:', finalUserId)
+        console.log('Fetching all sessions for user:', finalUserId)
         const { data, error } = await userSupabase
           .from('sessions')
           .select('*')
@@ -143,11 +143,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           .order('created_at', { ascending: false })
 
         if (error) {
-          console.error('❌ Error fetching sessions:', error)
+          console.error('Error fetching sessions:', error)
           return res.status(500).json({ error: error.message })
         }
 
-        console.log('✅ Fetched', data?.length || 0, 'sessions for user')
+        console.log('Fetched', data?.length || 0, 'sessions for user')
         return res.status(200).json(data || [])
       }
     }
