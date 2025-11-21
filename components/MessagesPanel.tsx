@@ -1,26 +1,32 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, PanInfo } from 'framer-motion'
-import { ArrowLeft, Send, Image as ImageIcon, Smile, X } from 'lucide-react'
+import { ArrowLeft, Send, Image as ImageIcon, Smile, X, Users, Plus } from 'lucide-react'
 import { useSession } from '@clerk/nextjs'
 import { User } from 'lucide-react'
 import { useSupabase } from '@/lib/supabase-client'
+import CreateGroupChatModal from './CreateGroupChatModal'
 
 interface Message {
   id: string
   sender_id: string
   receiver_id: string
+  conversation_id?: string | null
   content: string
   created_at: string
   read_at: string | null
 }
 
 interface Conversation {
-  userId: string
-  username: string
+  conversationId?: string
+  userId?: string // Legacy support
+  type?: 'direct' | 'group'
+  name: string
+  username?: string // Legacy support
   avatar_url: string | null
   lastMessage: string
   lastMessageTime: string
   unreadCount: number
+  participantCount?: number
 }
 
 interface MessagesPanelProps {
@@ -33,11 +39,13 @@ interface MessagesPanelProps {
 
 export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) {
   const [selectedFriend, setSelectedFriend] = useState<string | null>(null)
+  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [messageInput, setMessageInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isSending, setIsSending] = useState(false)
+  const [showCreateGroup, setShowCreateGroup] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const { session: clerkSession } = useSession()
@@ -74,8 +82,8 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
     }
   }
 
-  // Fetch messages for selected friend
-  const fetchMessages = async (friendId: string) => {
+  // Fetch messages for selected conversation or friend
+  const fetchMessages = async (conversationId?: string, friendId?: string) => {
     if (!clerkSession) return
 
     setIsLoading(true)
@@ -83,7 +91,16 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
       const token = await clerkSession.getToken({ template: 'supabase' })
       if (!token) return
 
-      const response = await fetch(`/api/messages?action=messages&otherUserId=${friendId}`, {
+      let url = '/api/messages?action=messages'
+      if (conversationId) {
+        url += `&conversationId=${conversationId}`
+      } else if (friendId) {
+        url += `&otherUserId=${friendId}`
+      } else {
+        return
+      }
+
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -106,7 +123,7 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
 
   // Send message
   const sendMessage = async () => {
-    if (!selectedFriend || !messageInput.trim() || !clerkSession || isSending) return
+    if ((!selectedFriend && !selectedConversation) || !messageInput.trim() || !clerkSession || isSending) return
 
     const content = messageInput.trim()
     const tempId = `temp-${Date.now()}`
@@ -116,7 +133,8 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
     const optimisticMessage: Message = {
       id: tempId,
       sender_id: currentUserId,
-      receiver_id: selectedFriend,
+      receiver_id: selectedFriend || '',
+      conversation_id: selectedConversation?.conversationId || null,
       content,
       created_at: new Date().toISOString(),
       read_at: null
@@ -139,16 +157,25 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
         return
       }
 
+      const requestBody: any = {
+        content
+      }
+
+      if (selectedConversation?.conversationId) {
+        requestBody.conversation_id = selectedConversation.conversationId
+      } else if (selectedFriend) {
+        requestBody.receiver_id = selectedFriend
+      } else {
+        return
+      }
+
       const response = await fetch('/api/messages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          receiver_id: selectedFriend,
-          content
-        })
+        body: JSON.stringify(requestBody)
       })
 
       if (response.ok) {
@@ -181,27 +208,46 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
 
   // Set up realtime subscription for messages
   useEffect(() => {
-    if (!selectedFriend || !clerkSession || !supabase) return
+    if ((!selectedFriend && !selectedConversation) || !clerkSession || !supabase) return
 
     // Clean up previous subscription
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current)
     }
 
+    const currentUserId = clerkSession.user?.id || ''
+    const conversationId = selectedConversation?.conversationId
+    const friendId = selectedFriend
+
     // Subscribe to new messages in real-time
+    let filter = ''
+    if (conversationId) {
+      filter = `conversation_id=eq.${conversationId}`
+    } else if (friendId) {
+      filter = `sender_id=eq.${friendId}`
+    }
+
+    if (!filter) return
+
     const channel = supabase
-      .channel(`messages:${selectedFriend}`)
+      .channel(`messages:${conversationId || friendId}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'messages',
-          filter: `sender_id=eq.${selectedFriend}`
+          filter: filter
         },
         (payload) => {
           const newMessage = payload.new as Message
-          if (newMessage.receiver_id === (clerkSession.user?.id || '')) {
+          // Only add if it's for the current user or conversation
+          if (conversationId) {
+            if (newMessage.conversation_id === conversationId) {
+              setMessages(prev => [...prev, newMessage])
+              fetchConversations()
+            }
+          } else if (newMessage.receiver_id === currentUserId) {
             setMessages(prev => [...prev, newMessage])
             fetchConversations()
           }
@@ -212,7 +258,11 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
     channelRef.current = channel
 
     // Initial fetch
-    fetchMessages(selectedFriend)
+    if (conversationId) {
+      fetchMessages(conversationId)
+    } else if (friendId) {
+      fetchMessages(undefined, friendId)
+    }
 
     return () => {
       if (channelRef.current) {
@@ -220,7 +270,7 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
         channelRef.current = null
       }
     }
-  }, [selectedFriend, clerkSession, supabase])
+  }, [selectedFriend, selectedConversation, clerkSession, supabase])
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -231,28 +281,87 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
     ? friends.find(f => f.friend.id === selectedFriend)?.friend
     : null
 
-  // Combine friends and conversations (show all friends, mark those with conversations)
-  const friendsWithConversations = friends.map(friend => {
-    const conversation = conversations.find(c => c.userId === friend.friend.id)
-    return {
-      ...friend,
-      lastMessage: conversation?.lastMessage,
-      lastMessageTime: conversation?.lastMessageTime,
-      unreadCount: conversation?.unreadCount || 0
+  // Handle conversation/friend selection
+  const handleSelectConversation = (conversation: Conversation) => {
+    setSelectedFriend(null)
+    setSelectedConversation(conversation)
+    if (conversation.conversationId) {
+      fetchMessages(conversation.conversationId)
+    } else if (conversation.userId) {
+      // Legacy: direct message
+      setSelectedFriend(conversation.userId)
+      fetchMessages(undefined, conversation.userId)
     }
+  }
+
+  const handleSelectFriend = (friendId: string) => {
+    setSelectedConversation(null)
+    setSelectedFriend(friendId)
+    fetchMessages(undefined, friendId)
+  }
+
+  // Combine group chats and direct message conversations
+  const allConversations: Array<{
+    id: string
+    type: 'direct' | 'group'
+    name: string
+    avatar_url: string | null
+    lastMessage: string
+    lastMessageTime: string
+    unreadCount: number
+    conversationId?: string
+    userId?: string
+    participantCount?: number
+  }> = []
+
+  // Add group chats
+  conversations
+    .filter(c => c.type === 'group')
+    .forEach(conv => {
+      allConversations.push({
+        id: conv.conversationId || '',
+        type: 'group',
+        name: conv.name,
+        avatar_url: conv.avatar_url,
+        lastMessage: conv.lastMessage,
+        lastMessageTime: conv.lastMessageTime,
+        unreadCount: conv.unreadCount,
+        conversationId: conv.conversationId,
+        participantCount: conv.participantCount
+      })
+    })
+
+  // Add direct message conversations (from friends)
+  friends.forEach(friend => {
+    const conversation = conversations.find(c => c.userId === friend.friend.id)
+    allConversations.push({
+      id: friend.friend.id,
+      type: 'direct',
+      name: friend.friend.username,
+      avatar_url: friend.friend.avatar_url,
+      lastMessage: conversation?.lastMessage || '',
+      lastMessageTime: conversation?.lastMessageTime || '',
+      unreadCount: conversation?.unreadCount || 0,
+      userId: friend.friend.id
+    })
   })
 
-  // Sort by last message time or alphabetically
-  friendsWithConversations.sort((a, b) => {
+  // Sort by last message time
+  allConversations.sort((a, b) => {
     if (a.lastMessageTime && b.lastMessageTime) {
       return new Date(b.lastMessageTime).getTime() - new Date(a.lastMessageTime).getTime()
     }
     if (a.lastMessageTime) return -1
     if (b.lastMessageTime) return 1
-    return a.friend.username.localeCompare(b.friend.username)
+    return a.name.localeCompare(b.name)
   })
 
-  if (selectedFriend && selectedFriendData) {
+  // Show conversation view (group chat or direct message)
+  if ((selectedFriend && selectedFriendData) || selectedConversation) {
+    const displayName = selectedConversation?.name || selectedFriendData?.username || 'Unknown'
+    const displayAvatar = selectedConversation?.avatar_url || selectedFriendData?.avatar_url || null
+    const isGroup = selectedConversation?.type === 'group'
+    
     return (
       <motion.div
         initial={{ x: 450, y: 650, opacity: 0 }}
@@ -273,26 +382,37 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
         {/* Header */}
         <div className="bg-white border-b border-gray-100 px-5 py-4 flex items-center gap-3 rounded-t-3xl">
           <button
-            onClick={() => setSelectedFriend(null)}
+            onClick={() => {
+              setSelectedFriend(null)
+              setSelectedConversation(null)
+            }}
             className="text-gray-500 hover:text-gray-900 transition-all duration-200 hover:scale-110"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-3 flex-1 min-w-0">
-            {selectedFriendData.avatar_url ? (
+            {displayAvatar ? (
               <img
-                src={selectedFriendData.avatar_url}
-                alt={selectedFriendData.username}
+                src={displayAvatar}
+                alt={displayName}
                 className="w-9 h-9 rounded-full object-cover ring-2 ring-gray-100"
               />
             ) : (
               <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center">
-                <User className="w-5 h-5 text-gray-400" />
+                {isGroup ? (
+                  <Users className="w-5 h-5 text-gray-400" />
+                ) : (
+                  <User className="w-5 h-5 text-gray-400" />
+                )}
               </div>
             )}
             <div className="min-w-0">
-              <p className="text-gray-900 font-medium text-sm truncate">{selectedFriendData.username}</p>
-              <p className="text-gray-400 text-xs truncate">@{selectedFriendData.username}</p>
+              <p className="text-gray-900 font-medium text-sm truncate">{displayName}</p>
+              {isGroup && selectedConversation?.participantCount ? (
+                <p className="text-gray-400 text-xs truncate">{selectedConversation.participantCount} members</p>
+              ) : selectedFriendData ? (
+                <p className="text-gray-400 text-xs truncate">@{selectedFriendData.username}</p>
+              ) : null}
             </div>
           </div>
           <button
@@ -399,8 +519,12 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
       <div className="bg-white border-b border-gray-100 px-5 py-4 flex items-center justify-between rounded-t-3xl">
         <h2 className="text-gray-900 font-medium text-lg">Messages</h2>
         <div className="flex items-center gap-2">
-          <button className="text-gray-400 hover:text-gray-600 transition-all duration-200 hover:scale-110">
-            <Send className="w-5 h-5" />
+          <button
+            onClick={() => setShowCreateGroup(true)}
+            className="text-gray-400 hover:text-gray-600 transition-all duration-200 hover:scale-110"
+            title="Create Group Chat"
+          >
+            <Users className="w-5 h-5" />
           </button>
           <button
             onClick={onClose}
@@ -411,44 +535,65 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
         </div>
       </div>
 
-      {/* Friends List */}
+      {/* Conversations List */}
       <div className="flex-1 overflow-y-auto bg-gray-50/50">
-        {isLoading && friendsWithConversations.length === 0 ? (
+        {isLoading && allConversations.length === 0 ? (
           <div className="flex justify-center items-center h-full">
             <div className="w-6 h-6 border-2 border-gray-200 border-t-gray-900 rounded-full animate-spin"></div>
           </div>
-        ) : friendsWithConversations.length === 0 ? (
+        ) : allConversations.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-400">
-            <p className="text-sm">No friends to message</p>
+            <p className="text-sm">No conversations yet</p>
+            <button
+              onClick={() => setShowCreateGroup(true)}
+              className="mt-2 text-sm text-gray-600 hover:text-gray-900 underline"
+            >
+              Create a group chat
+            </button>
           </div>
         ) : (
           <div className="divide-y divide-gray-100">
-            {friendsWithConversations.map((friend) => (
+            {allConversations.map((conv) => (
               <button
-                key={friend.id}
-                onClick={() => setSelectedFriend(friend.friend.id)}
+                key={conv.id}
+                onClick={() => {
+                  if (conv.type === 'group' && conv.conversationId) {
+                    handleSelectConversation(conv as Conversation)
+                  } else if (conv.type === 'direct' && conv.userId) {
+                    handleSelectFriend(conv.userId)
+                  }
+                }}
                 className="w-full px-5 py-4 hover:bg-white transition-all duration-200 flex items-center gap-3 group"
               >
-                {friend.friend.avatar_url ? (
+                {conv.avatar_url ? (
                   <img
-                    src={friend.friend.avatar_url}
-                    alt={friend.friend.username}
+                    src={conv.avatar_url}
+                    alt={conv.name}
                     className="w-11 h-11 rounded-full object-cover ring-2 ring-gray-100 group-hover:ring-gray-200 transition-all duration-200"
                   />
                 ) : (
                   <div className="w-11 h-11 rounded-full bg-gray-100 flex items-center justify-center group-hover:bg-gray-200 transition-all duration-200">
-                    <User className="w-5 h-5 text-gray-400" />
+                    {conv.type === 'group' ? (
+                      <Users className="w-5 h-5 text-gray-400" />
+                    ) : (
+                      <User className="w-5 h-5 text-gray-400" />
+                    )}
                   </div>
                 )}
                 <div className="flex-1 text-left min-w-0">
-                  <p className="text-gray-900 font-medium text-sm truncate">{friend.friend.username}</p>
-                  {friend.lastMessage && (
-                    <p className="text-gray-400 text-xs truncate mt-0.5">{friend.lastMessage}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-gray-900 font-medium text-sm truncate">{conv.name}</p>
+                    {conv.type === 'group' && conv.participantCount && (
+                      <span className="text-xs text-gray-400">({conv.participantCount})</span>
+                    )}
+                  </div>
+                  {conv.lastMessage && (
+                    <p className="text-gray-400 text-xs truncate mt-0.5">{conv.lastMessage}</p>
                   )}
                 </div>
-                {friend.unreadCount > 0 && (
+                {conv.unreadCount > 0 && (
                   <div className="bg-gray-900 text-white text-xs font-medium rounded-full w-5 h-5 flex items-center justify-center">
-                    {friend.unreadCount > 9 ? '9+' : friend.unreadCount}
+                    {conv.unreadCount > 9 ? '9+' : conv.unreadCount}
                   </div>
                 )}
               </button>
@@ -456,6 +601,16 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
           </div>
         )}
       </div>
+
+      {/* Create Group Chat Modal */}
+      <CreateGroupChatModal
+        isOpen={showCreateGroup}
+        onClose={() => setShowCreateGroup(false)}
+        friends={friends}
+        onSuccess={() => {
+          fetchConversations()
+        }}
+      />
     </motion.div>
   )
 }

@@ -16,11 +16,14 @@ import {
     UserPlus,
     UserCheck,
     UserX,
-    Users
+    Users,
+    Plus
 } from 'lucide-react'
-import SettingsModal from './SettingsModal'
+import { SettingsModal } from './SettingsModal'
 import AuthButton from './AuthButton'
 import MessagesPanel from './MessagesPanel'
+import CreateProjectModal from './CreateProjectModal'
+import EditProjectModal from './EditProjectModal'
 import { useSupabase } from '@/lib/supabase-client'
 import { useUser, useSession } from '@clerk/nextjs'
 
@@ -124,6 +127,12 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
     const [friendsOffset, setFriendsOffset] = useState(0)
     const friendsListRef = useRef<HTMLDivElement>(null)
     const [showMessages, setShowMessages] = useState(false)
+    const [showCreateProject, setShowCreateProject] = useState(false)
+    const [projects, setProjects] = useState<Array<{ id: string, name: string, description: string | null, created_at: string }>>([])
+    const [isLoadingProjects, setIsLoadingProjects] = useState(false)
+    const [showProjects, setShowProjects] = useState(false)
+    const [selectedProject, setSelectedProject] = useState<{ id: string, name: string, description: string | null, created_at: string, session_ids?: string[] } | null>(null)
+    const [showEditProject, setShowEditProject] = useState(false)
 
     // Debug: Log when avatarUrl changes
     useEffect(() => {
@@ -310,6 +319,42 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
         }
     }
 
+    // Fetch projects
+    const fetchProjects = async () => {
+        if (!clerkUser || !clerkSession) {
+            setIsLoadingProjects(false)
+            return
+        }
+
+        setIsLoadingProjects(true)
+        try {
+            const token = await clerkSession.getToken({ template: 'supabase' })
+
+            if (!token) {
+                console.warn('Could not get token for fetching projects')
+                setIsLoadingProjects(false)
+                return
+            }
+
+            const response = await fetch('/api/projects', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+
+            if (response.ok) {
+                const data = await response.json()
+                setProjects(data.projects || [])
+            } else {
+                console.error('Error fetching projects:', response.statusText)
+            }
+        } catch (error) {
+            console.error('Error fetching projects:', error)
+        } finally {
+            setIsLoadingProjects(false)
+        }
+    }
+
     // Fetch saved sessions
     const fetchSessions = async () => {
         if (!clerkUser || !clerkSession) {
@@ -358,6 +403,13 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
             fetchSessions()
         }
     }, [isExpanded, showHistory, clerkUser, clerkSession])
+
+    // Load projects when sidebar expands and projects section is shown
+    useEffect(() => {
+        if (isExpanded && showProjects && clerkUser && clerkSession) {
+            fetchProjects()
+        }
+    }, [isExpanded, showProjects, clerkUser, clerkSession])
 
     const handleLoadSession = async (session: Session) => {
         // Don't load if we're editing
@@ -1072,32 +1124,93 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                         </AnimatePresence>
                     </div>
 
-                    {/* Curate Session Icon */}
-                    <Tooltip
-                        content="Curate a session"
-                        placement="right"
-                        classNames={{
-                            content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
-                        }}
-                    >
-                        <button className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors">
-                            <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
-                                <CurateSessionIcon className="w-6 h-6" />
-                            </div>
-                            <AnimatePresence>
-                                {isExpanded && (
-                                    <motion.span
-                                        initial={{ opacity: 0 }}
-                                        animate={{ opacity: 1 }}
-                                        exit={{ opacity: 0 }}
-                                        className="whitespace-nowrap font-medium"
+                    {/* Projects Icon */}
+                    <div className="flex flex-col">
+                        <Tooltip
+                            content="Projects"
+                            placement="right"
+                            classNames={{
+                                content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
+                            }}
+                        >
+                            <button
+                                onClick={() => {
+                                    if (!isExpanded) {
+                                        setIsExpanded(true)
+                                    }
+                                    setShowProjects(!showProjects)
+                                }}
+                                className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors"
+                            >
+                                <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
+                                    <CurateSessionIcon className="w-6 h-6" />
+                                </div>
+                                <AnimatePresence>
+                                    {isExpanded && (
+                                        <motion.div
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            exit={{ opacity: 0 }}
+                                            className="flex items-center justify-between flex-1"
+                                        >
+                                            <span className="whitespace-nowrap font-medium">Projects</span>
+                                            <ChevronDown
+                                                className={`w-4 h-4 transition-transform ${showProjects ? 'rotate-180' : ''}`}
+                                            />
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </button>
+                        </Tooltip>
+
+                        {/* Projects List */}
+                        <AnimatePresence>
+                            {isExpanded && showProjects && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    className="ml-10 mt-2 space-y-2"
+                                >
+                                    {/* Create Project Button */}
+                                    <button
+                                        onClick={() => setShowCreateProject(true)}
+                                        className="w-full px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors border border-gray-200 flex items-center gap-2"
                                     >
-                                        Curate a session
-                                    </motion.span>
-                                )}
-                            </AnimatePresence>
-                        </button>
-                    </Tooltip>
+                                        <Plus className="w-4 h-4" />
+                                        Create New Project
+                                    </button>
+
+                                    {/* Projects List */}
+                                    {isLoadingProjects ? (
+                                        <p className="text-xs text-gray-500">Loading projects...</p>
+                                    ) : projects.length === 0 ? (
+                                        <p className="text-xs text-gray-500">No projects yet</p>
+                                    ) : (
+                                        <div className="space-y-1 max-h-64 overflow-y-auto">
+                                            {projects.map((project) => (
+                                                <button
+                                                    key={project.id}
+                                                    onClick={() => {
+                                                        setSelectedProject(project)
+                                                        setShowEditProject(true)
+                                                    }}
+                                                    className="w-full px-3 py-2 text-left text-sm bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200 group"
+                                                >
+                                                    <p className="font-medium text-gray-900 truncate">
+                                                        {project.name}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 mt-0.5">
+                                                        {new Date(project.created_at).toLocaleDateString()}
+                                                    </p>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
 
                     {/* Expanded Content Area */}
                     <AnimatePresence>
@@ -1223,11 +1336,10 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
 
                 {/* Settings Modal - rendered via portal at body level */}
                 <SettingsModal
-                    isOpen={isSettingsOpen}
-                    onClose={() => setIsSettingsOpen(false)}
-                    currentUsername={username}
-                    currentAvatarUrl={avatarUrl || undefined}
-                    onUpdate={handleSettingsUpdate}
+                    open={isSettingsOpen}
+                    onOpenChange={setIsSettingsOpen}
+                    username={username}
+                    avatarUrl={avatarUrl || undefined}
                 />
             </motion.div>
 
@@ -1258,6 +1370,30 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                     />
                 )}
             </AnimatePresence>
+
+            {/* Create Project Modal */}
+            <CreateProjectModal
+                isOpen={showCreateProject}
+                onClose={() => setShowCreateProject(false)}
+                onSuccess={() => {
+                    fetchProjects()
+                    console.log('Project created successfully')
+                }}
+            />
+
+            {/* Edit Project Modal */}
+            <EditProjectModal
+                isOpen={showEditProject}
+                onClose={() => {
+                    setShowEditProject(false)
+                    setSelectedProject(null)
+                }}
+                project={selectedProject}
+                onSuccess={() => {
+                    fetchProjects()
+                    console.log('Project updated successfully')
+                }}
+            />
         </>
     )
 }
