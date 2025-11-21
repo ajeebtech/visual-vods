@@ -226,7 +226,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       // Cache friend requests for 2 minutes
       const { getCached, getCacheKey } = await import('../../lib/redis')
-      const cacheKey = getCacheKey('friends:requests', finalUserId, status || 'all')
+      const statusStr = typeof status === 'string' ? status : (Array.isArray(status) ? status[0] : 'all')
+      const cacheKey = getCacheKey('friends:requests', finalUserId, statusStr)
       
       const cachedRequests = await getCached(
         cacheKey,

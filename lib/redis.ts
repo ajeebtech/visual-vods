@@ -16,11 +16,11 @@ export function getRedisClient(): Redis {
   // Parse Upstash URL if provided
   let redisConfig: any = {
     maxRetriesPerRequest: 3,
-    retryStrategy: (times) => {
+    retryStrategy: (times: number) => {
       const delay = Math.min(times * 50, 2000)
       return delay
     },
-    reconnectOnError: (err) => {
+    reconnectOnError: (err: Error) => {
       const targetError = 'READONLY'
       if (err.message.includes(targetError)) {
         return true
