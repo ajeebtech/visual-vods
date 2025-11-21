@@ -14,21 +14,21 @@ import { useEffect, useState, useRef } from "react";
 
 const TASK_SEQUENCES = [
     {
-        status: "Searching the web",
+        status: "scraping vlr",
         lines: [
-            "Initializing web search...",
-            "Scanning web pages...",
-            "Visiting 5 websites...",
-            "Analyzing content...",
-            "Generating summary...",
+            "finding matches",
+            "joining maps",
+            "watching replays",
+            "analyzing player stats",
+            "generating summary",
         ],
     },
     {
-        status: "Analyzing results",
+        status: "looking for vods",
         lines: [
-            "Analyzing search results...",
-            "Generating summary...",
-            "Checking for relevant information...",
+            "finding vods",
+            "grabbing thumbnails",
+            "putting it all together",
             "Finalizing analysis...",
             "Setting up lazy loading...",
             "Configuring caching strategies...",

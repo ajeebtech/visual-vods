@@ -57,6 +57,7 @@ interface MatchScene3DProps {
   tournament?: string
   playerName?: string
   initialSessionId?: string | null
+  onAllThumbnailsLoaded?: () => void
 }
 
 // Helper to get YouTube thumbnail from video ID or URL
@@ -349,7 +350,8 @@ export default function MatchScene3D({
   team2Id, 
   tournament, 
   playerName,
-  initialSessionId 
+  initialSessionId,
+  onAllThumbnailsLoaded
 }: MatchScene3DProps) {
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null)
   const [selectedVOD, setSelectedVOD] = useState<VODLink | null>(null)
@@ -461,6 +463,35 @@ export default function MatchScene3D({
     () => generateMatchPositions(filteredMatches.length),
     [filteredMatches.length]
   )
+
+  // Notify parent when all thumbnails are loaded
+  useEffect(() => {
+    // Only notify when:
+    // 1. All matches are visible (progressive loading complete)
+    // 2. All thumbnails have loaded (or matches have no thumbnails)
+    // 3. We have matches to display
+    if (
+      filteredMatches.length > 0 &&
+      visibleMatches >= filteredMatches.length
+    ) {
+      // Count how many matches should have thumbnails
+      const matchesWithThumbnails = matchesToDisplay.filter(match => {
+        const firstVOD = match.vodLinks[0]
+        return getYouTubeThumbnail(firstVOD?.url || '') !== null
+      }).length
+      
+      // If all thumbnails are loaded (or no thumbnails to load), notify parent
+      if (loadedThumbnails.size >= matchesWithThumbnails || matchesWithThumbnails === 0) {
+        // Small delay to ensure everything is settled
+        const timer = setTimeout(() => {
+          if (onAllThumbnailsLoaded) {
+            onAllThumbnailsLoaded()
+          }
+        }, 300)
+        return () => clearTimeout(timer)
+      }
+    }
+  }, [visibleMatches, filteredMatches.length, loadedThumbnails.size, matchesToDisplay, onAllThumbnailsLoaded])
 
   // Auto-save session when ALL matches are fully loaded (always, since user must be logged in to search)
   useEffect(() => {
@@ -708,9 +739,8 @@ export default function MatchScene3D({
                 <span>Saving session...</span>
               </div>
             ) : sessionId ? (
-              <div className="flex items-center gap-2 text-xs text-green-600">
-                <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                <span>Session saved</span>
+              <div className="flex items-center justify-end">
+                <div className="w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
               </div>
             ) : (
               <div className="flex items-center gap-2 text-xs text-gray-500">
@@ -742,39 +772,42 @@ export default function MatchScene3D({
               className="relative w-full max-w-7xl flex gap-4"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Video container */}
-              <div className="relative flex-1 aspect-video bg-black rounded-lg overflow-hidden">
-                {/* Close button */}
-                <button
-                  onClick={closeEmbed}
-                  className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors"
-                >
-                  <X className="w-6 h-6 text-white" />
-                </button>
+              {/* Left column: Video and map buttons */}
+              <div className="flex-1 flex flex-col gap-3">
+                {/* Video container */}
+                <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
+                  {/* Close button */}
+                  <button
+                    onClick={closeEmbed}
+                    className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors"
+                  >
+                    <X className="w-6 h-6 text-white" />
+                  </button>
+                  
+                  {/* Embed iframe */}
+                  <iframe
+                    ref={youtubeIframeRef}
+                    src={selectedVOD.embedUrl.includes('enablejsapi') 
+                      ? selectedVOD.embedUrl 
+                      : `${selectedVOD.embedUrl}${selectedVOD.embedUrl.includes('?') ? '&' : '?'}enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}`}
+                    className="w-full h-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    title={`Match ${selectedMatch.matchId} VOD`}
+                  />
+                </div>
                 
-                {/* Embed iframe */}
-                <iframe
-                  ref={youtubeIframeRef}
-                  src={selectedVOD.embedUrl.includes('enablejsapi') 
-                    ? selectedVOD.embedUrl 
-                    : `${selectedVOD.embedUrl}${selectedVOD.embedUrl.includes('?') ? '&' : '?'}enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}`}
-                  className="w-full h-full"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  title={`Match ${selectedMatch.matchId} VOD`}
-                />
-                
-                {/* VOD selector if multiple VODs */}
+                {/* VOD selector if multiple VODs - now below the video */}
                 {selectedMatch.vodLinks.length > 1 && (
-                  <div className="absolute bottom-4 left-4 right-4 flex gap-2 overflow-x-auto">
+                  <div className="flex gap-2 overflow-x-auto px-1">
                     {selectedMatch.vodLinks.map((vod, index) => (
                       <button
                         key={index}
                         onClick={() => setSelectedVOD(vod)}
-                        className={`px-3 py-1 rounded text-sm font-medium whitespace-nowrap ${
+                        className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
                           selectedVOD === vod
-                            ? 'bg-purple-600 text-white'
-                            : 'bg-white/20 text-white hover:bg-white/30'
+                            ? 'bg-purple-600 text-white shadow-lg'
+                            : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
                         }`}
                       >
                         {vod.mapName || `YouTube ${index + 1}`}

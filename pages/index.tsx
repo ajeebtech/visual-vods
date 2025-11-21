@@ -1,4 +1,4 @@
-import { Suspense, useState } from 'react'
+import { Suspense, useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import Head from 'next/head'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -264,13 +264,35 @@ export default function Home() {
         }
       }
       
-      // Longer delay to show loading, then show scene
-      setTimeout(() => {
-        setShowScene(true)
-        setIsLoading(false)
-      }, 5000) // 5 seconds
+      // Show scene immediately - loading will be controlled by thumbnail loading
+      setShowScene(true)
+      
+      // If no matches are returned, hide loading immediately
+      // This will be handled after matchesData is set, but we also check here as a fallback
+      if (!team1 || !team1Id) {
+        // If no team1 is selected, there won't be matches, so hide loading
+        setTimeout(() => {
+          setIsLoading(false)
+        }, 1000)
+      }
     }
   }
+
+  // Handle when all thumbnails are loaded
+  const handleAllThumbnailsLoaded = () => {
+    setIsLoading(false)
+  }
+
+  // Also handle case where matchesData is set but has no matches
+  useEffect(() => {
+    if (matchesData && (!matchesData.matches || matchesData.matches.length === 0)) {
+      // If matches data is loaded but empty, hide loading after a short delay
+      const timer = setTimeout(() => {
+        setIsLoading(false)
+      }, 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [matchesData])
 
   return (
     <>
@@ -437,6 +459,7 @@ export default function Home() {
             tournament={tournament}
             playerName={playerName}
             initialSessionId={loadedSessionId}
+            onAllThumbnailsLoaded={handleAllThumbnailsLoaded}
           />
         )}
 

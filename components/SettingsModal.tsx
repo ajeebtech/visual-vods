@@ -121,6 +121,7 @@ function ProfileSettings({ username, avatarUrl, onUpdate }: { username?: string;
   const [currentAvatarUrl, setCurrentAvatarUrl] = React.useState(avatarUrl)
   const [currentUsername, setCurrentUsername] = React.useState(username || "")
   const [isSaving, setIsSaving] = React.useState(false)
+  const [message, setMessage] = React.useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
   React.useEffect(() => {
     setCurrentAvatarUrl(avatarUrl)
@@ -137,13 +138,15 @@ function ProfileSettings({ username, avatarUrl, onUpdate }: { username?: string;
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file')
+      setMessage({ text: 'Please select an image file', type: 'error' })
+      setTimeout(() => setMessage(null), 5000)
       return
     }
 
     // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      alert('Image size must be less than 5MB')
+      setMessage({ text: 'Image size must be less than 5MB', type: 'error' })
+      setTimeout(() => setMessage(null), 5000)
       return
     }
 
@@ -207,9 +210,12 @@ function ProfileSettings({ username, avatarUrl, onUpdate }: { username?: string;
       // Update local state
       setCurrentAvatarUrl(publicUrl)
       onUpdate?.()
+      setMessage({ text: 'Profile picture uploaded successfully!', type: 'success' })
+      setTimeout(() => setMessage(null), 5000)
     } catch (error: any) {
       console.error('Error uploading avatar:', error)
-      alert(`Error uploading avatar: ${error.message || 'Unknown error'}`)
+      setMessage({ text: `Error uploading avatar: ${error.message || 'Unknown error'}`, type: 'error' })
+      setTimeout(() => setMessage(null), 5000)
     } finally {
       setIsUploading(false)
       // Reset file input
@@ -261,6 +267,17 @@ function ProfileSettings({ username, avatarUrl, onUpdate }: { username?: string;
 
   return (
     <div className="space-y-8">
+      {/* Message Display */}
+      {message && (
+        <div className={`p-4 rounded-lg ${
+          message.type === 'success' 
+            ? 'bg-green-50 text-green-800 border border-green-200' 
+            : 'bg-red-50 text-red-800 border border-red-200'
+        }`}>
+          <p className="text-sm font-medium">{message.text}</p>
+        </div>
+      )}
+
       {/* Picture Section */}
       <div className="space-y-4">
         <Label className="text-base font-medium text-gray-900">Picture</Label>
