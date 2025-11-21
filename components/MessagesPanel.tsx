@@ -16,6 +16,14 @@ interface Message {
   read_at: string | null
 }
 
+interface CachedMessages {
+  messages: Message[]
+  readReceipts: Record<string, string>
+  timestamp: number
+  conversationId?: string
+  friendId?: string
+}
+
 interface Conversation {
   conversationId?: string
   userId?: string // Legacy support
@@ -46,21 +54,68 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
   const [isLoading, setIsLoading] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [showCreateGroup, setShowCreateGroup] = useState(false)
+  const [readReceipts, setReadReceipts] = useState<Record<string, string>>({}) // userId -> last_read_at
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const { session: clerkSession } = useSession()
   const { supabase } = useSupabase()
   const channelRef = useRef<any>(null)
+  const conversationsRef = useRef<Conversation[]>([])
+
+  // Local cache helpers for messages (last 50 messages)
+  const getCacheKey = (conversationId?: string, friendId?: string) => {
+    return `messages_cache_${conversationId || friendId || 'unknown'}`
+  }
+  
+  const getCachedMessages = (conversationId?: string, friendId?: string): { messages: Message[], readReceipts: Record<string, string> } => {
+    if (typeof window === 'undefined') return { messages: [], readReceipts: {} }
+    try {
+      const key = getCacheKey(conversationId, friendId)
+      const cached = localStorage.getItem(key)
+      if (cached) {
+        const data: CachedMessages = JSON.parse(cached)
+        // Cache is valid for 1 hour
+        if (Date.now() - data.timestamp < 3600000) {
+          return {
+            messages: data.messages || [],
+            readReceipts: data.readReceipts || {}
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error reading from cache:', error)
+    }
+    return { messages: [], readReceipts: {} }
+  }
+  
+  const saveCachedMessages = (messages: Message[], readReceipts: Record<string, string>, conversationId?: string, friendId?: string) => {
+    if (typeof window === 'undefined') return
+    try {
+      const key = getCacheKey(conversationId, friendId)
+      const cacheData: CachedMessages = {
+        messages: messages.slice(-50), // Only cache last 50 messages
+        readReceipts,
+        timestamp: Date.now(),
+        conversationId,
+        friendId
+      }
+      localStorage.setItem(key, JSON.stringify(cacheData))
+    } catch (error) {
+      console.error('Error saving to cache:', error)
+    }
+  }
 
   useEffect(() => {
     console.log('MessagesPanel rendered', { friendsCount: friends.length })
   }, [friends])
 
-  // Fetch conversations
-  const fetchConversations = async () => {
+  // Fetch conversations (with optional loading state control)
+  const fetchConversations = async (showLoading = false) => {
     if (!clerkSession) return
 
-    setIsLoading(true)
+    if (showLoading) {
+      setIsLoading(true)
+    }
     try {
       const token = await clerkSession.getToken({ template: 'supabase' })
       if (!token) return
@@ -73,20 +128,84 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
 
       if (response.ok) {
         const data = await response.json()
-        setConversations(data.conversations || [])
+        const convs = data.conversations || []
+        setConversations(convs)
+        conversationsRef.current = convs // Update ref
       }
     } catch (error) {
       console.error('Error fetching conversations:', error)
     } finally {
-      setIsLoading(false)
+      if (showLoading) {
+        setIsLoading(false)
+      }
     }
   }
 
+  // Update a single conversation in the list (optimistic update)
+  const updateConversationInList = (conversationId: string, updates: Partial<Conversation>) => {
+    setConversations(prev => prev.map(conv => {
+      if (conv.conversationId === conversationId) {
+        return { ...conv, ...updates }
+      }
+      return conv
+    }))
+    // Also update ref
+    conversationsRef.current = conversationsRef.current.map(conv => {
+      if (conv.conversationId === conversationId) {
+        return { ...conv, ...updates }
+      }
+      return conv
+    })
+  }
+
   // Fetch messages for selected conversation or friend
-  const fetchMessages = async (conversationId?: string, friendId?: string) => {
+  const fetchMessages = async (conversationId?: string, friendId?: string, useCache = true) => {
     if (!clerkSession) return
 
-    setIsLoading(true)
+    const currentUserId = clerkSession.user?.id || ''
+
+    // Load from cache first for instant display
+    let hasCachedMessages = false
+    if (useCache) {
+      const cached = getCachedMessages(conversationId, friendId)
+      if (cached.messages.length > 0) {
+        // Apply same filtering to cached messages
+        let filteredCachedMessages = cached.messages
+        if (conversationId) {
+          filteredCachedMessages = cached.messages.filter((msg: Message) => 
+            msg.conversation_id === conversationId
+          )
+        } else if (friendId) {
+          filteredCachedMessages = cached.messages.filter((msg: Message) => {
+            const isBetweenUsers = 
+              (msg.sender_id === currentUserId && msg.receiver_id === friendId) ||
+              (msg.sender_id === friendId && msg.receiver_id === currentUserId)
+            if (!isBetweenUsers) return false
+            if (msg.conversation_id) {
+              const isGroupChat = conversationsRef.current.find(
+                c => c.conversationId === msg.conversation_id && c.type === 'group'
+              )
+              return !isGroupChat
+            }
+            return true
+          })
+        }
+        if (filteredCachedMessages.length > 0) {
+          hasCachedMessages = true
+          setMessages(filteredCachedMessages)
+          setReadReceipts(cached.readReceipts)
+          // Scroll to bottom
+          setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+          }, 50)
+        }
+      }
+    }
+
+    // Only show loading if we don't have cached messages
+    if (!hasCachedMessages) {
+      setIsLoading(true)
+    }
     try {
       const token = await clerkSession.getToken({ template: 'supabase' })
       if (!token) return
@@ -108,7 +227,54 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
 
       if (response.ok) {
         const data = await response.json()
-        setMessages(data.messages || [])
+        let fetchedMessages = data.messages || []
+        const fetchedReadReceipts = data.readReceipts || {}
+        
+        // Additional client-side filtering to prevent cross-contamination
+        if (conversationId) {
+          // For conversations, ensure all messages belong to this conversation
+          fetchedMessages = fetchedMessages.filter((msg: Message) => 
+            msg.conversation_id === conversationId
+          )
+        } else if (friendId) {
+          // For direct messages, ensure:
+          // 1. Message is between current user and friend
+          // 2. Not a group chat message
+          fetchedMessages = fetchedMessages.filter((msg: Message) => {
+            // Must be between current user and friend
+            const isBetweenUsers = 
+              (msg.sender_id === currentUserId && msg.receiver_id === friendId) ||
+              (msg.sender_id === friendId && msg.receiver_id === currentUserId)
+            
+            if (!isBetweenUsers) return false
+            
+            // If message has conversation_id, check it's not a group chat
+            if (msg.conversation_id) {
+              const isGroupChat = conversationsRef.current.find(
+                c => c.conversationId === msg.conversation_id && c.type === 'group'
+              )
+              return !isGroupChat
+            }
+            
+            // Legacy direct message (no conversation_id) is fine
+            return true
+          })
+        }
+        
+        // Only update if messages actually changed (prevent unnecessary re-renders)
+        setMessages(prev => {
+          // Check if messages are actually different
+          if (prev.length === fetchedMessages.length && 
+              prev.every((msg, idx) => msg.id === fetchedMessages[idx]?.id)) {
+            return prev // No change, return previous to prevent re-render
+          }
+          return fetchedMessages
+        })
+        setReadReceipts(fetchedReadReceipts)
+        
+        // Save to cache
+        saveCachedMessages(fetchedMessages, fetchedReadReceipts, conversationId, friendId)
+        
         // Scroll to bottom
         setTimeout(() => {
           messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -182,7 +348,15 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
         const newMessage = await response.json()
         // Replace optimistic message with real one
         setMessages(prev => prev.map(m => m.id === tempId ? newMessage : m))
-        await fetchConversations()
+        // Update conversation list optimistically without full reload
+        if (selectedConversation?.conversationId) {
+          updateConversationInList(selectedConversation.conversationId, {
+            lastMessage: newMessage.content,
+            lastMessageTime: newMessage.created_at
+          })
+        }
+        // Only fetch conversations in background (no loading state)
+        fetchConversations(false)
       } else {
         const error = await response.json()
         // Remove optimistic message on error
@@ -201,18 +375,26 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
     }
   }
 
-  // Load conversations on mount
+  // Load conversations on mount (with loading state)
   useEffect(() => {
-    fetchConversations()
+    fetchConversations(true)
   }, [clerkSession])
 
   // Set up realtime subscription for messages
   useEffect(() => {
     if ((!selectedFriend && !selectedConversation) || !clerkSession || !supabase) return
 
-    // Clean up previous subscription
+    // Clean up previous subscriptions
     if (channelRef.current) {
-      supabase.removeChannel(channelRef.current)
+      if (typeof channelRef.current === 'object' && 'messageChannel' in channelRef.current) {
+        supabase.removeChannel(channelRef.current.messageChannel)
+        if (channelRef.current.readReceiptChannel) {
+          supabase.removeChannel(channelRef.current.readReceiptChannel)
+        }
+      } else {
+        // Legacy: single channel
+        supabase.removeChannel(channelRef.current as any)
+      }
     }
 
     const currentUserId = clerkSession.user?.id || ''
@@ -220,11 +402,15 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
     const friendId = selectedFriend
 
     // Subscribe to new messages in real-time
+    // For direct messages, we need to filter by both sender and receiver to avoid group chat messages
     let filter = ''
     if (conversationId) {
+      // For conversations, filter by conversation_id only
       filter = `conversation_id=eq.${conversationId}`
     } else if (friendId) {
-      filter = `sender_id=eq.${friendId}`
+      // For direct messages, filter by receiver_id to ensure it's a direct message to current user
+      // This prevents group chat messages from appearing
+      filter = `receiver_id=eq.${currentUserId}`
     }
 
     if (!filter) return
@@ -243,30 +429,120 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
           const newMessage = payload.new as Message
           // Only add if it's for the current user or conversation
           if (conversationId) {
+            // For conversations, verify it matches the conversation_id
             if (newMessage.conversation_id === conversationId) {
-              setMessages(prev => [...prev, newMessage])
-              fetchConversations()
+              setMessages(prev => {
+                const updated = [...prev, newMessage]
+                // Update cache with new message
+                saveCachedMessages(updated, readReceipts, conversationId, undefined)
+                return updated
+              })
+              // Update conversation list optimistically
+              updateConversationInList(conversationId, {
+                lastMessage: newMessage.content,
+                lastMessageTime: newMessage.created_at
+              })
             }
-          } else if (newMessage.receiver_id === currentUserId) {
-            setMessages(prev => [...prev, newMessage])
-            fetchConversations()
+          } else if (friendId && newMessage.receiver_id === currentUserId) {
+            // For direct messages, we filtered by receiver_id, but still need to verify:
+            // 1. The sender is the friend we're chatting with
+            // 2. It's not a group chat message
+            if (newMessage.sender_id === friendId) {
+              // Check if this message has a conversation_id that's a group chat
+              if (newMessage.conversation_id) {
+                const isGroupChat = conversationsRef.current.find(
+                  c => c.conversationId === newMessage.conversation_id && c.type === 'group'
+                )
+                // Only add if it's not a group chat
+                if (!isGroupChat) {
+                  setMessages(prev => {
+                    const updated = [...prev, newMessage]
+                    // Update cache
+                    saveCachedMessages(updated, readReceipts, newMessage.conversation_id || undefined, friendId)
+                    return updated
+                  })
+                  // Update conversation list optimistically if it's a direct message conversation
+                  if (newMessage.conversation_id) {
+                    updateConversationInList(newMessage.conversation_id, {
+                      lastMessage: newMessage.content,
+                      lastMessageTime: newMessage.created_at
+                    })
+                  }
+                }
+              } else {
+                // Message has no conversation_id, it's a legacy direct message - add it
+                setMessages(prev => {
+                  const updated = [...prev, newMessage]
+                  // Update cache
+                  saveCachedMessages(updated, readReceipts, undefined, friendId)
+                  return updated
+                })
+              }
+            }
           }
         }
       )
       .subscribe()
-
-    channelRef.current = channel
-
-    // Initial fetch
+    
+    // Subscribe to read receipt updates (conversation_participants changes)
+    // Only subscribe if we have a conversationId (not for legacy direct messages)
     if (conversationId) {
-      fetchMessages(conversationId)
-    } else if (friendId) {
-      fetchMessages(undefined, friendId)
+      const readReceiptChannel = supabase
+        .channel(`read_receipts:${conversationId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'conversation_participants',
+            filter: `conversation_id=eq.${conversationId}`
+          },
+          (payload) => {
+            const updated = payload.new as any
+            if (updated && updated.last_read_at) {
+              setReadReceipts(prev => {
+                // Only update if the value actually changed
+                if (prev[updated.user_id] === updated.last_read_at) {
+                  return prev // No change, prevent re-render
+                }
+                const newReceipts = {
+                  ...prev,
+                  [updated.user_id]: updated.last_read_at
+                }
+                // Update cache asynchronously to avoid blocking render
+                setTimeout(() => {
+                  setMessages(currentMessages => {
+                    saveCachedMessages(currentMessages, newReceipts, conversationId, undefined)
+                    return currentMessages
+                  })
+                }, 0)
+                return newReceipts
+              })
+            }
+          }
+        )
+        .subscribe()
+      
+      // Store read receipt channel for cleanup
+      channelRef.current = { messageChannel: channel, readReceiptChannel }
+    } else {
+      channelRef.current = { messageChannel: channel }
     }
+
+    // Don't fetch here - handleSelectConversation/handleSelectFriend already calls fetchMessages
+    // This effect is only for setting up realtime subscriptions
 
     return () => {
       if (channelRef.current) {
-        supabase.removeChannel(channelRef.current)
+        if (typeof channelRef.current === 'object' && 'messageChannel' in channelRef.current) {
+          supabase.removeChannel(channelRef.current.messageChannel)
+          if (channelRef.current.readReceiptChannel) {
+            supabase.removeChannel(channelRef.current.readReceiptChannel)
+          }
+        } else {
+          // Legacy: single channel
+          supabase.removeChannel(channelRef.current as any)
+        }
         channelRef.current = null
       }
     }
@@ -285,6 +561,8 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
   const handleSelectConversation = (conversation: Conversation) => {
     setSelectedFriend(null)
     setSelectedConversation(conversation)
+    // Don't clear messages immediately - let cache handle instant display
+    // Messages will be filtered/cleared by fetchMessages if needed
     if (conversation.conversationId) {
       fetchMessages(conversation.conversationId)
     } else if (conversation.userId) {
@@ -297,6 +575,8 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
   const handleSelectFriend = (friendId: string) => {
     setSelectedConversation(null)
     setSelectedFriend(friendId)
+    // Don't clear messages immediately - let cache handle instant display
+    // Messages will be filtered/cleared by fetchMessages if needed
     fetchMessages(undefined, friendId)
   }
 
@@ -436,6 +716,30 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
             <>
               {messages.map((message) => {
                 const isSent = message.sender_id === (clerkSession?.user?.id || '')
+                const currentUserId = clerkSession?.user?.id || ''
+                
+                // Check if message has been seen (read receipt)
+                let isSeen = false
+                if (isSent && selectedConversation) {
+                  // For sent messages, check if other participants have read it
+                  const otherParticipants = Object.keys(readReceipts).filter(id => id !== currentUserId)
+                  if (otherParticipants.length > 0) {
+                    // Check if any other participant's last_read_at is after this message
+                    const messageTime = new Date(message.created_at).getTime()
+                    isSeen = otherParticipants.some(participantId => {
+                      const lastRead = readReceipts[participantId]
+                      return lastRead && new Date(lastRead).getTime() >= messageTime
+                    })
+                  }
+                } else if (isSent && selectedFriend) {
+                  // For direct messages, check if the friend has read it
+                  const friendLastRead = readReceipts[selectedFriend]
+                  if (friendLastRead) {
+                    const messageTime = new Date(message.created_at).getTime()
+                    isSeen = new Date(friendLastRead).getTime() >= messageTime
+                  }
+                }
+                
                 return (
                   <div
                     key={message.id}
@@ -448,12 +752,17 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
                         }`}
                     >
                       <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">{message.content}</p>
-                      <p className={`text-xs mt-1.5 ${isSent ? 'text-gray-400' : 'text-gray-400'}`}>
-                        {new Date(message.created_at).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </p>
+                      <div className={`flex items-center gap-1.5 mt-1.5 ${isSent ? 'justify-end' : 'justify-start'}`}>
+                        <p className={`text-xs ${isSent ? 'text-gray-400' : 'text-gray-400'}`}>
+                          {new Date(message.created_at).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </p>
+                        {isSent && isSeen && (
+                          <span className="text-xs text-blue-400 font-medium">Seen</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )
@@ -608,7 +917,7 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
         onClose={() => setShowCreateGroup(false)}
         friends={friends}
         onSuccess={() => {
-          fetchConversations()
+          fetchConversations(false) // Refresh list without showing loading
         }}
       />
     </motion.div>
