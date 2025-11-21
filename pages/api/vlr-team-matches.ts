@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import * as cheerio from 'cheerio'
+import { getCached, getCacheKey } from '../../lib/redis'
 
 interface MatchLink {
   href: string
@@ -60,7 +61,20 @@ export default async function handler(
   const targetTeamName = hasTeam2 ? team2Name : teamName
   const filterTeam1Name = hasTeam2 ? teamName : null // Team to filter for when team2 is provided
 
+  // Create cache key based on query params
+  const cacheKey = getCacheKey(
+    'vlr:team-matches',
+    teamId,
+    teamName.toLowerCase(),
+    hasTeam2 ? team2Id : 'none',
+    hasTeam2 ? team2Name.toLowerCase() : 'none'
+  )
+
   try {
+    // Cache for 1 hour (3600 seconds) - VLR data doesn't change often
+    const data = await getCached(
+      cacheKey,
+      async () => {
     // Helper function to fetch matches from a specific page
     const fetchMatchesPage = async (page: number = 1): Promise<{ matchLinks: MatchLink[], hasMorePages: boolean }> => {
       const currentPageNum = page
@@ -565,34 +579,40 @@ export default async function handler(
       }
     }
     
+        // Return the data to be cached
+        return { 
+          teamId,
+          teamName,
+          team2Id: hasTeam2 ? team2Id : undefined,
+          team2Name: hasTeam2 ? team2Name : undefined,
+          url: hasTeam2 ? `https://www.vlr.gg/team/matches/${targetTeamId}/${targetTeamName.toLowerCase().replace(/\s+/g, '-')}/` : undefined,
+          matchLinks: allMatchLinks.map(link => ({
+            href: link.href,
+            fullUrl: link.fullUrl,
+            matchId: link.matchId
+          })),
+          totalMatches: allMatchLinks.length,
+          matches: matchData.map(match => ({
+            href: match.href,
+            matchId: match.matchId,
+            date: match.date,
+            vodLinks: match.vodLinks,
+            hasVODs: match.vodLinks.length > 0,
+            matchInfo: match.matchInfo
+          })),
+          fetchedMatches: matchData.length,
+          matchesWithVODs: matchData.filter(m => m.vodLinks.length > 0).length
+        }
+      },
+      3600 // 1 hour TTL
+    )
+
     // Set CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*')
     res.setHeader('Access-Control-Allow-Methods', 'GET')
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
     
-    return res.status(200).json({ 
-      teamId,
-      teamName,
-      team2Id: hasTeam2 ? team2Id : undefined,
-      team2Name: hasTeam2 ? team2Name : undefined,
-      url: hasTeam2 ? `https://www.vlr.gg/team/matches/${targetTeamId}/${targetTeamName.toLowerCase().replace(/\s+/g, '-')}/` : undefined,
-      matchLinks: allMatchLinks.map(link => ({
-        href: link.href,
-        fullUrl: link.fullUrl,
-        matchId: link.matchId
-      })),
-      totalMatches: allMatchLinks.length,
-      matches: matchData.map(match => ({
-        href: match.href,
-        matchId: match.matchId,
-        date: match.date,
-        vodLinks: match.vodLinks,
-        hasVODs: match.vodLinks.length > 0,
-        matchInfo: match.matchInfo
-      })),
-      fetchedMatches: matchData.length,
-      matchesWithVODs: matchData.filter(m => m.vodLinks.length > 0).length
-    })
+    return res.status(200).json(data)
   } catch (error: any) {
     console.error('Error proxying VLR.gg team matches request:', error)
     return res.status(500).json({ error: error.message || 'Internal server error' })

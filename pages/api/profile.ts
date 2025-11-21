@@ -96,23 +96,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     )
 
     if (req.method === 'GET') {
-      // Get user profile
-      const { data, error } = await userSupabase
-        .from('profiles')
-        .select('*')
-        .eq('id', finalUserId)
-        .single()
+      // Get user profile with caching
+      const { getCached, getCacheKey } = await import('../../lib/redis')
+      const cacheKey = getCacheKey('profile', finalUserId)
+      
+      const profile = await getCached(
+        cacheKey,
+        async () => {
+          const { data, error } = await userSupabase
+            .from('profiles')
+            .select('*')
+            .eq('id', finalUserId)
+            .single()
 
-      if (error) {
-        if (error.code === 'PGRST116') {
-          // Profile doesn't exist yet
-          return res.status(200).json({ data: null })
-        }
-        console.error('Error fetching profile:', error)
-        return res.status(500).json({ error: error.message })
-      }
+          if (error) {
+            if (error.code === 'PGRST116') {
+              // Profile doesn't exist yet
+              return null
+            }
+            throw error
+          }
 
-      return res.status(200).json({ data })
+          return data
+        },
+        300 // 5 minutes TTL (profiles change more often)
+      )
+
+      return res.status(200).json({ data: profile })
     }
 
     if (req.method === 'POST' || req.method === 'PUT') {
@@ -267,6 +277,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           details: result.error.details,
           hint: result.error.hint
         })
+      }
+
+      // Invalidate cache after successful update
+      try {
+        const { invalidateCache, getCacheKey } = await import('../../lib/redis')
+        await invalidateCache(getCacheKey('profile', finalUserId))
+      } catch (cacheError) {
+        console.error('Error invalidating cache:', cacheError)
+        // Continue even if cache invalidation fails
       }
 
       return res.status(200).json({ 

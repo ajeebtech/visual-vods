@@ -71,7 +71,7 @@ export default function SettingsModal({
       // (The bucket might exist but we don't have permission to list buckets)
       let buckets: any[] = []
       const { data: bucketsData, error: listError } = await supabase.storage.listBuckets()
-      
+
       if (listError) {
         console.warn('Could not list buckets (might be permission issue):', listError)
         // Continue anyway - we'll try to upload and see what error we get
@@ -82,7 +82,7 @@ export default function SettingsModal({
       console.log('Available buckets:', buckets?.map(b => b.name) || '[] (might be permission issue)')
 
       const avatarsBucket = buckets?.find(b => b.name === 'avatars')
-      
+
       // If we can't list buckets or the list is empty, we'll try uploading anyway
       // The bucket might exist but we just don't have permission to list it
       if (buckets.length === 0) {
@@ -131,14 +131,14 @@ export default function SettingsModal({
           message: uploadError.message,
           error: uploadError
         })
-        
+
         // Provide more specific error messages
         if (uploadError.message.includes('Bucket not found') || uploadError.message.includes('not found')) {
           setError(
             'Storage bucket "avatars" not found. Please create it in Supabase Dashboard → Storage → Buckets'
           )
         } else if (
-          uploadError.message.includes('new row violates row-level security') || 
+          uploadError.message.includes('new row violates row-level security') ||
           uploadError.message.includes('permission') ||
           uploadError.message.includes('Row Level Security') ||
           uploadError.message.includes('RLS') ||
@@ -165,7 +165,7 @@ export default function SettingsModal({
               cacheControl: '3600',
               upsert: false
             })
-          
+
           if (retryError) {
             setError(`Upload failed: ${retryError.message}`)
           } else {
@@ -175,7 +175,7 @@ export default function SettingsModal({
             console.log('Avatar uploaded (retry), public URL:', publicUrl)
             setAvatarUrl(publicUrl)
             setSuccess('Profile picture uploaded successfully!')
-            
+
             // Auto-save the avatar URL immediately after upload
             try {
               if (clerkUser && clerkSession) {
@@ -200,7 +200,7 @@ export default function SettingsModal({
             } catch (err) {
               console.warn('Error auto-saving avatar:', err)
             }
-            
+
             setUploading(false)
             return
           }
@@ -219,12 +219,12 @@ export default function SettingsModal({
       console.log('Avatar uploaded, public URL:', publicUrl)
       setAvatarUrl(publicUrl)
       setSuccess('Profile picture uploaded successfully!')
-      
+
       // Auto-save the avatar URL immediately after upload
       try {
         if (clerkUser && clerkSession) {
           console.log('💾 Attempting to save avatar URL to profiles table:', publicUrl)
-          
+
           const token = await clerkSession.getToken({ template: 'supabase' })
           if (token) {
             const response = await fetch('/api/profile', {
@@ -239,19 +239,19 @@ export default function SettingsModal({
             })
 
             const result = await response.json()
-            
+
             console.log('📡 Profile API response:', {
               status: response.status,
               ok: response.ok,
               result
             })
-            
+
             if (!response.ok) {
               console.error('❌ Could not auto-save avatar to profiles table:', result)
               setError(`Failed to save profile picture: ${result.error || 'Unknown error'}. Please try clicking "Save Changes" manually.`)
             } else {
               console.log('✅ Avatar URL auto-saved to profiles table:', result)
-              
+
               // Trigger update callback to refresh sidebar
               if (onUpdate) {
                 setTimeout(() => {
@@ -266,7 +266,7 @@ export default function SettingsModal({
       } catch (err) {
         console.warn('Error auto-saving avatar:', err)
       }
-      
+
       setUploading(false)
     } catch (err: any) {
       setError(err.message || 'Failed to upload image')
@@ -296,11 +296,11 @@ export default function SettingsModal({
         id: clerkUser.id,
         updated_at: new Date().toISOString()
       }
-      
+
       if (username !== currentUsername) {
         profileUpdates.username = username
       }
-      
+
       if (avatarUrl && avatarUrl !== currentAvatarUrl) {
         profileUpdates.avatar_url = avatarUrl
         console.log('💾 Saving avatar URL in handleSave:', avatarUrl)
@@ -308,7 +308,7 @@ export default function SettingsModal({
 
       console.log('💾 Updating profile with:', profileUpdates)
       console.log('🔑 Clerk User ID:', clerkUser.id)
-      
+
       // Get Clerk JWT token to send with the request
       if (!clerkSession) {
         setError('You must be logged in to update your profile')
@@ -346,12 +346,12 @@ export default function SettingsModal({
       }
 
       console.log('✅ Profile updated successfully')
-      
+
       // Note: Username is stored in Supabase profiles table, which is the source of truth
       // Clerk metadata update removed as it's not needed and causes TypeScript errors
 
       setSuccess('Profile updated successfully!')
-      
+
       // Call onUpdate callback to refresh parent component
       if (onUpdate) {
         setTimeout(() => {
@@ -360,7 +360,7 @@ export default function SettingsModal({
       }
 
       setIsLoading(false)
-      
+
       // Close modal after successful save
       setTimeout(() => {
         onClose()
@@ -398,227 +398,226 @@ export default function SettingsModal({
           className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
           onClick={onClose}
         >
-        <motion.div
-          initial={{ scale: 0.95, opacity: 0, y: 20 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.95, opacity: 0, y: 20 }}
-          onClick={(e) => e.stopPropagation()}
-          className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[85vh] max-h-[90vh] flex overflow-hidden"
-        >
-          {/* Left Sidebar Navigation */}
-          <div className="w-64 bg-gray-50 border-r border-gray-200 flex flex-col">
-            {/* Header */}
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-xl font-bold text-black">Settings</h2>
-                <button
-                  onClick={onClose}
-                  className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
-                  aria-label="Close"
-                >
-                  <X className="w-5 h-5 text-gray-600" />
-                </button>
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.95, opacity: 0, y: 20 }}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[85vh] max-h-[90vh] flex overflow-hidden"
+          >
+            {/* Left Sidebar Navigation */}
+            <div className="w-64 bg-gray-50 border-r border-gray-200 flex flex-col">
+              {/* Header */}
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-xl font-bold text-black">Settings</h2>
+                  <button
+                    onClick={onClose}
+                    className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
+                    aria-label="Close"
+                  >
+                    <X className="w-5 h-5 text-gray-600" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Navigation Tabs */}
+              <div className="flex-1 overflow-y-auto p-2">
+                {tabs.map((tab) => {
+                  const Icon = tab.icon
+                  const isActive = activeTab === tab.id
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-colors ${isActive
+                          ? 'bg-gray-200 text-black font-medium'
+                          : 'text-gray-600 hover:bg-gray-100'
+                        }`}
+                    >
+                      <Icon className="w-5 h-5" />
+                      <span className="text-sm">{tab.label}</span>
+                    </button>
+                  )
+                })}
               </div>
             </div>
 
-            {/* Navigation Tabs */}
-            <div className="flex-1 overflow-y-auto p-2">
-              {tabs.map((tab) => {
-                const Icon = tab.icon
-                const isActive = activeTab === tab.id
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-colors ${
-                      isActive
-                        ? 'bg-gray-200 text-black font-medium'
-                        : 'text-gray-600 hover:bg-gray-100'
-                    }`}
-                  >
-                    <Icon className="w-5 h-5" />
-                    <span className="text-sm">{tab.label}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
+            {/* Right Content Area */}
+            <div className="flex-1 overflow-y-auto">
+              <div className="p-8">
 
-          {/* Right Content Area */}
-          <div className="flex-1 overflow-y-auto">
-            <div className="p-8">
+                {/* Tab Content */}
+                {activeTab === 'profile' && (
+                  <>
+                    <h3 className="text-2xl font-bold text-black mb-8">Profile</h3>
 
-              {/* Tab Content */}
-              {activeTab === 'profile' && (
-                <>
-                  <h3 className="text-2xl font-bold text-black mb-8">Profile</h3>
-                  
-                  {/* Profile Picture Section */}
-                  <div className="mb-8">
-                    <label className="block text-base font-medium text-gray-700 mb-4">
-                      Picture
-                    </label>
-                    <div className="flex items-start gap-6">
-                      <div className="relative flex-shrink-0">
-                        {avatarUrl ? (
-                          <img
-                            src={avatarUrl}
-                            alt="Profile"
-                            className="w-32 h-32 rounded-full object-cover border-2 border-gray-200 shadow-sm"
+                    {/* Profile Picture Section */}
+                    <div className="mb-8">
+                      <label className="block text-base font-medium text-gray-700 mb-4">
+                        Picture
+                      </label>
+                      <div className="flex items-start gap-6">
+                        <div className="relative flex-shrink-0">
+                          {avatarUrl ? (
+                            <img
+                              src={avatarUrl}
+                              alt="Profile"
+                              className="w-32 h-32 rounded-full object-cover border-2 border-gray-200 shadow-sm"
+                            />
+                          ) : (
+                            <div className="w-32 h-32 rounded-full bg-gray-100 flex items-center justify-center border-2 border-gray-200 shadow-sm">
+                              <User className="w-16 h-16 text-gray-400" />
+                            </div>
+                          )}
+                          {uploading && (
+                            <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center backdrop-blur-sm">
+                              <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 pt-2">
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={handleFileSelect}
+                            className="hidden"
                           />
-                        ) : (
-                          <div className="w-32 h-32 rounded-full bg-gray-100 flex items-center justify-center border-2 border-gray-200 shadow-sm">
-                            <User className="w-16 h-16 text-gray-400" />
-                          </div>
-                        )}
-                        {uploading && (
-                          <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center backdrop-blur-sm">
-                            <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          </div>
-                        )}
+                          <button
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={uploading}
+                            className="flex items-center gap-2 px-6 py-3 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-base font-medium text-gray-700 mb-3"
+                          >
+                            <Upload className="w-5 h-5" />
+                            {uploading ? 'Uploading...' : 'Upload Image'}
+                          </button>
+                          <p className="text-sm text-gray-500">
+                            JPG, PNG or GIF. Max size 5MB
+                          </p>
+                        </div>
                       </div>
-                      <div className="flex-1 pt-2">
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/*"
-                          onChange={handleFileSelect}
-                          className="hidden"
-                        />
-                        <button
-                          onClick={() => fileInputRef.current?.click()}
-                          disabled={uploading}
-                          className="flex items-center gap-2 px-6 py-3 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-base font-medium text-gray-700 mb-3"
-                        >
-                          <Upload className="w-5 h-5" />
-                          {uploading ? 'Uploading...' : 'Upload Image'}
+                    </div>
+
+                    {/* Username Section */}
+                    <div>
+                      <label className="block text-base font-medium text-gray-700 mb-4">
+                        Username
+                      </label>
+                      <input
+                        type="text"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        placeholder="Enter your username"
+                        className="w-full px-5 py-3 text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent text-black placeholder:text-gray-400"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {activeTab === 'general' && (
+                  <>
+                    <h3 className="text-2xl font-bold text-black mb-8">General</h3>
+                    <div className="space-y-6">
+                      <div>
+                        <label className="block text-base font-medium text-gray-700 mb-3">
+                          Appearance
+                        </label>
+                        <select className="w-full px-5 py-3 text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent bg-white">
+                          <option>System</option>
+                          <option>Light</option>
+                          <option>Dark</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-base font-medium text-gray-700 mb-3">
+                          Language
+                        </label>
+                        <select className="w-full px-5 py-3 text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent bg-white">
+                          <option>Auto-detect</option>
+                          <option>English</option>
+                          <option>Spanish</option>
+                          <option>French</option>
+                        </select>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {activeTab === 'notifications' && (
+                  <>
+                    <h3 className="text-2xl font-bold text-black mb-8">Notifications</h3>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                        <div>
+                          <p className="font-medium text-black">Email Notifications</p>
+                          <p className="text-sm text-gray-500">Receive email updates</p>
+                        </div>
+                        <input type="checkbox" className="w-5 h-5" defaultChecked />
+                      </div>
+                      <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                        <div>
+                          <p className="font-medium text-black">Push Notifications</p>
+                          <p className="text-sm text-gray-500">Receive push notifications</p>
+                        </div>
+                        <input type="checkbox" className="w-5 h-5" />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {activeTab === 'security' && (
+                  <>
+                    <h3 className="text-2xl font-bold text-black mb-8">Security</h3>
+                    <div className="space-y-6">
+                      <div>
+                        <label className="block text-base font-medium text-gray-700 mb-3">
+                          Two-Factor Authentication
+                        </label>
+                        <button className="px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors font-medium">
+                          Enable 2FA
                         </button>
-                        <p className="text-sm text-gray-500">
-                          JPG, PNG or GIF. Max size 5MB
-                        </p>
                       </div>
-                    </div>
-                  </div>
-
-                  {/* Username Section */}
-                  <div>
-                    <label className="block text-base font-medium text-gray-700 mb-4">
-                      Username
-                    </label>
-                    <input
-                      type="text"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      placeholder="Enter your username"
-                      className="w-full px-5 py-3 text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent text-black placeholder:text-gray-400"
-                    />
-                  </div>
-                </>
-              )}
-
-              {activeTab === 'general' && (
-                <>
-                  <h3 className="text-2xl font-bold text-black mb-8">General</h3>
-                  <div className="space-y-6">
-                    <div>
-                      <label className="block text-base font-medium text-gray-700 mb-3">
-                        Appearance
-                      </label>
-                      <select className="w-full px-5 py-3 text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent bg-white">
-                        <option>System</option>
-                        <option>Light</option>
-                        <option>Dark</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-base font-medium text-gray-700 mb-3">
-                        Language
-                      </label>
-                      <select className="w-full px-5 py-3 text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent bg-white">
-                        <option>Auto-detect</option>
-                        <option>English</option>
-                        <option>Spanish</option>
-                        <option>French</option>
-                      </select>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {activeTab === 'notifications' && (
-                <>
-                  <h3 className="text-2xl font-bold text-black mb-8">Notifications</h3>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
                       <div>
-                        <p className="font-medium text-black">Email Notifications</p>
-                        <p className="text-sm text-gray-500">Receive email updates</p>
+                        <label className="block text-base font-medium text-gray-700 mb-3">
+                          Change Password
+                        </label>
+                        <button className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium text-gray-700">
+                          Update Password
+                        </button>
                       </div>
-                      <input type="checkbox" className="w-5 h-5" defaultChecked />
                     </div>
-                    <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                      <div>
-                        <p className="font-medium text-black">Push Notifications</p>
-                        <p className="text-sm text-gray-500">Receive push notifications</p>
-                      </div>
-                      <input type="checkbox" className="w-5 h-5" />
-                    </div>
+                  </>
+                )}
+
+                {/* Error/Success Messages */}
+                {error && (
+                  <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-sm text-red-600">{error}</p>
                   </div>
-                </>
-              )}
-
-              {activeTab === 'security' && (
-                <>
-                  <h3 className="text-2xl font-bold text-black mb-8">Security</h3>
-                  <div className="space-y-6">
-                    <div>
-                      <label className="block text-base font-medium text-gray-700 mb-3">
-                        Two-Factor Authentication
-                      </label>
-                      <button className="px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors font-medium">
-                        Enable 2FA
-                      </button>
-                    </div>
-                    <div>
-                      <label className="block text-base font-medium text-gray-700 mb-3">
-                        Change Password
-                      </label>
-                      <button className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium text-gray-700">
-                        Update Password
-                      </button>
-                    </div>
+                )}
+                {success && (
+                  <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-sm text-green-600">{success}</p>
                   </div>
-                </>
-              )}
+                )}
 
-              {/* Error/Success Messages */}
-              {error && (
-                <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-sm text-red-600">{error}</p>
-                </div>
-              )}
-              {success && (
-                <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <p className="text-sm text-green-600">{success}</p>
-                </div>
-              )}
-
-              {/* Save Button (only show on profile tab) */}
-              {activeTab === 'profile' && (
-                <div className="mt-8 pt-6 border-t border-gray-200">
-                  <button
-                    onClick={handleSave}
-                    disabled={isLoading || uploading}
-                    className="px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                  >
-                    {isLoading ? 'Saving...' : 'Save Changes'}
-                  </button>
-                </div>
-              )}
+                {/* Save Button (only show on profile tab) */}
+                {activeTab === 'profile' && (
+                  <div className="mt-8 pt-6 border-t border-gray-200">
+                    <button
+                      onClick={handleSave}
+                      disabled={isLoading || uploading}
+                      className="px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                    >
+                      {isLoading ? 'Saving...' : 'Save Changes'}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          </motion.div>
         </motion.div>
-      </motion.div>
       )}
     </AnimatePresence>
   )

@@ -107,48 +107,78 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(500).json({ error: error.message })
       }
 
+      // Invalidate cache after creating session
+      try {
+        const { invalidateCache, getCacheKey } = await import('../../lib/redis')
+        await invalidateCache(getCacheKey('sessions', finalUserId))
+      } catch (cacheError) {
+        console.error('Error invalidating cache:', cacheError)
+      }
+
       return res.status(201).json(data)
     }
 
     if (req.method === 'GET') {
-      // Get all sessions for the user
+      // Get all sessions for the user with caching
       const { id } = req.query
+      const { getCached, getCacheKey } = await import('../../lib/redis')
 
       if (id) {
         // Get a specific session
-        const { data, error } = await userSupabase
-          .from('sessions')
-          .select('*')
-          .eq('id', id as string)
-          .single()
+        const cacheKey = getCacheKey('session', id as string)
+        
+        const session = await getCached(
+          cacheKey,
+          async () => {
+            const { data, error } = await userSupabase
+              .from('sessions')
+              .select('*')
+              .eq('id', id as string)
+              .single()
 
-        if (error) {
-          console.error('Error fetching session:', error)
-          return res.status(500).json({ error: error.message })
-        }
+            if (error) {
+              throw error
+            }
 
-        if (!data) {
+            if (!data) {
+              return null
+            }
+
+            return data
+          },
+          60 // 1 minute TTL
+        )
+
+        if (!session) {
           return res.status(404).json({ error: 'Session not found' })
         }
 
-        return res.status(200).json(data)
+        return res.status(200).json(session)
       } else {
         // Get all sessions for the user
-        // RLS should filter by user_id, but we can also explicitly filter for safety
-        console.log('Fetching all sessions for user:', finalUserId)
-        const { data, error } = await userSupabase
-          .from('sessions')
-          .select('*')
-          .eq('user_id', finalUserId) // Explicitly filter by user_id
-          .order('created_at', { ascending: false })
+        const cacheKey = getCacheKey('sessions', finalUserId)
+        
+        const sessions = await getCached(
+          cacheKey,
+          async () => {
+            console.log('Fetching all sessions for user:', finalUserId)
+            const { data, error } = await userSupabase
+              .from('sessions')
+              .select('*')
+              .eq('user_id', finalUserId) // Explicitly filter by user_id
+              .order('created_at', { ascending: false })
 
-        if (error) {
-          console.error('Error fetching sessions:', error)
-          return res.status(500).json({ error: error.message })
-        }
+            if (error) {
+              throw error
+            }
 
-        console.log('Fetched', data?.length || 0, 'sessions for user')
-        return res.status(200).json(data || [])
+            return data || []
+          },
+          60 // 1 minute TTL (sessions change frequently)
+        )
+
+        console.log('Fetched', sessions?.length || 0, 'sessions for user')
+        return res.status(200).json(sessions)
       }
     }
 
@@ -176,6 +206,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(500).json({ error: error.message })
       }
 
+      // Invalidate cache after updating session
+      try {
+        const { invalidateCache, getCacheKey } = await import('../../lib/redis')
+        await invalidateCache(getCacheKey('sessions', finalUserId))
+        await invalidateCache(getCacheKey('session', id))
+      } catch (cacheError) {
+        console.error('Error invalidating cache:', cacheError)
+      }
+
       return res.status(200).json(data)
     }
 
@@ -195,6 +234,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (error) {
         console.error('Error deleting session:', error)
         return res.status(500).json({ error: error.message })
+      }
+
+      // Invalidate cache after deleting session
+      try {
+        const { invalidateCache, getCacheKey } = await import('../../lib/redis')
+        await invalidateCache(getCacheKey('sessions', finalUserId))
+        await invalidateCache(getCacheKey('session', id as string))
+      } catch (cacheError) {
+        console.error('Error invalidating cache:', cacheError)
       }
 
       return res.status(200).json({ success: true })

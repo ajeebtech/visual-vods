@@ -140,7 +140,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
       }
 
-      return res.status(200).json({ users: profiles || [] })
+      // Cache search results for 5 minutes (short TTL since searches vary)
+      const { getCached, getCacheKey } = await import('../../lib/redis')
+      const cacheKey = getCacheKey('friends:search', finalUserId, searchQuery.toLowerCase())
+      
+      const cachedResults = await getCached(
+        cacheKey,
+        async () => ({ users: profiles || [] }),
+        300 // 5 minutes
+      )
+
+      return res.status(200).json(cachedResults)
     }
 
     // GET FRIEND REQUESTS (pending, accepted, or all)
@@ -214,7 +224,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
       })
 
-      return res.status(200).json({ requests: transformed })
+      // Cache friend requests for 2 minutes
+      const { getCached, getCacheKey } = await import('../../lib/redis')
+      const cacheKey = getCacheKey('friends:requests', finalUserId, status || 'all')
+      
+      const cachedRequests = await getCached(
+        cacheKey,
+        async () => ({ requests: transformed }),
+        120 // 2 minutes
+      )
+
+      return res.status(200).json(cachedRequests)
     }
 
     // GET FRIENDS LIST (accepted friends only)
@@ -284,11 +304,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
       })
 
-      return res.status(200).json({ 
-        friends,
-        hasMore: (count || 0) > offset + friends.length,
-        total: count || 0
-      })
+      // Cache friends list for 2 minutes
+      const { getCached, getCacheKey } = await import('../../lib/redis')
+      const cacheKey = getCacheKey('friends:list', finalUserId, limit, offset)
+      
+      const cachedFriends = await getCached(
+        cacheKey,
+        async () => ({ 
+          friends,
+          hasMore: (count || 0) > offset + friends.length,
+          total: count || 0
+        }),
+        120 // 2 minutes
+      )
+
+      return res.status(200).json(cachedFriends)
     }
 
     // SEND FRIEND REQUEST
@@ -367,6 +397,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(500).json({ error: error.message })
       }
 
+      // Invalidate cache after creating friend request
+      try {
+        const { invalidateCache, getCacheKey } = await import('../../lib/redis')
+        await invalidateCache(getCacheKey('friends:requests', finalUserId, '*'))
+        await invalidateCache(getCacheKey('friends:list', finalUserId, '*'))
+      } catch (cacheError) {
+        console.error('Error invalidating cache:', cacheError)
+      }
+
       return res.status(201).json(data)
     }
 
@@ -425,6 +464,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(500).json({ error: error.message })
       }
 
+      // Invalidate cache after responding to friend request
+      try {
+        const { invalidateCache, getCacheKey } = await import('../../lib/redis')
+        await invalidateCache(getCacheKey('friends:requests', finalUserId, '*'))
+        await invalidateCache(getCacheKey('friends:list', finalUserId, '*'))
+      } catch (cacheError) {
+        console.error('Error invalidating cache:', cacheError)
+      }
+
       return res.status(200).json(data)
     }
 
@@ -468,10 +516,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             if (serviceError) {
               return res.status(500).json({ error: serviceError.message })
             }
+            // Invalidate cache after deleting friend request
+            try {
+              const { invalidateCache, getCacheKey } = await import('../../lib/redis')
+              await invalidateCache(getCacheKey('friends:requests', finalUserId, '*'))
+              await invalidateCache(getCacheKey('friends:list', finalUserId, '*'))
+            } catch (cacheError) {
+              console.error('Error invalidating cache:', cacheError)
+            }
             return res.status(200).json({ success: true })
           }
         }
         return res.status(500).json({ error: error.message })
+      }
+
+      // Invalidate cache after deleting friend request
+      try {
+        const { invalidateCache, getCacheKey } = await import('../../lib/redis')
+        await invalidateCache(getCacheKey('friends:requests', finalUserId, '*'))
+        await invalidateCache(getCacheKey('friends:list', finalUserId, '*'))
+      } catch (cacheError) {
+        console.error('Error invalidating cache:', cacheError)
       }
 
       return res.status(200).json({ success: true })

@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { getCached, getCacheKey } from '../../lib/redis'
 
 export default async function handler(
   req: NextApiRequest,
@@ -14,7 +15,12 @@ export default async function handler(
     return res.status(400).json({ error: 'Missing or invalid term parameter' })
   }
 
+  const cacheKey = getCacheKey('vlr:search', term.toLowerCase())
+
   try {
+    const data = await getCached(
+      cacheKey,
+      async () => {
     const response = await fetch(
       `https://www.vlr.gg/search/auto/?term=${encodeURIComponent(term)}`,
       {
@@ -26,10 +32,13 @@ export default async function handler(
     )
 
     if (!response.ok) {
-      return res.status(response.status).json({ error: 'Failed to fetch from VLR.gg' })
+          throw new Error('Failed to fetch from VLR.gg')
     }
 
-    const data = await response.json()
+        return await response.json()
+      },
+      1800 // 30 minutes TTL
+    )
     
     // Set CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*')
