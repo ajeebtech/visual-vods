@@ -173,65 +173,65 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                             savedAvatar = cached.data.avatar_url || null
                             console.log('✅ Profile fetched from cache:', { savedUsername, savedAvatar })
                         } else {
-                            const response = await fetch('/api/profile', {
-                                method: 'GET',
-                                headers: {
-                                    'Authorization': `Bearer ${token}`
-                                }
-                            })
+                        const response = await fetch('/api/profile', {
+                            method: 'GET',
+                            headers: {
+                                'Authorization': `Bearer ${token}`
+                            }
+                        })
 
-                            if (response.ok) {
-                                const result = await response.json()
+                        if (response.ok) {
+                            const result = await response.json()
                                 // Cache the result
                                 setCached(cacheKey, result, 300) // 5 minutes
                                 
-                                if (result.data) {
-                                    savedUsername = result.data.username || null
-                                    savedAvatar = result.data.avatar_url || null
-                                    console.log('✅ Profile fetched from API:', { savedUsername, savedAvatar })
-                                } else {
-                                    // Profile doesn't exist - create it automatically
-                                    console.log('📝 Creating new profile for user:', clerkUser.id)
-                                    const createResponse = await fetch('/api/profile', {
-                                        method: 'PUT',
-                                        headers: {
-                                            'Content-Type': 'application/json',
-                                            'Authorization': `Bearer ${token}`
-                                        },
-                                        body: JSON.stringify({
-                                            username: clerkUser.fullName || clerkUser.firstName || null,
-                                            avatar_url: clerkUser.imageUrl || null
-                                        })
+                            if (result.data) {
+                                savedUsername = result.data.username || null
+                                savedAvatar = result.data.avatar_url || null
+                                console.log('✅ Profile fetched from API:', { savedUsername, savedAvatar })
+                            } else {
+                                // Profile doesn't exist - create it automatically
+                                console.log('📝 Creating new profile for user:', clerkUser.id)
+                                const createResponse = await fetch('/api/profile', {
+                                    method: 'PUT',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': `Bearer ${token}`
+                                    },
+                                    body: JSON.stringify({
+                                        username: clerkUser.fullName || clerkUser.firstName || null,
+                                        avatar_url: clerkUser.imageUrl || null
                                     })
+                                })
 
-                                    if (createResponse.ok) {
-                                        console.log('✅ Profile created successfully')
+                                if (createResponse.ok) {
+                                    console.log('✅ Profile created successfully')
                                         // Invalidate cache
                                         invalidateCache(getCacheKey('profile', clerkUser.id))
-                                        // Fetch the newly created profile
-                                        const fetchResponse = await fetch('/api/profile', {
-                                            method: 'GET',
-                                            headers: {
-                                                'Authorization': `Bearer ${token}`
-                                            }
-                                        })
-                                        if (fetchResponse.ok) {
-                                            const fetchResult = await fetchResponse.json()
+                                    // Fetch the newly created profile
+                                    const fetchResponse = await fetch('/api/profile', {
+                                        method: 'GET',
+                                        headers: {
+                                            'Authorization': `Bearer ${token}`
+                                        }
+                                    })
+                                    if (fetchResponse.ok) {
+                                        const fetchResult = await fetchResponse.json()
                                             // Cache the result
                                             setCached(getCacheKey('profile', clerkUser.id), fetchResult, 300)
-                                            if (fetchResult.data) {
-                                                savedUsername = fetchResult.data.username || null
-                                                savedAvatar = fetchResult.data.avatar_url || null
-                                            }
+                                        if (fetchResult.data) {
+                                            savedUsername = fetchResult.data.username || null
+                                            savedAvatar = fetchResult.data.avatar_url || null
                                         }
-                                    } else {
-                                        const createError = await createResponse.json()
-                                        console.warn('Could not create profile:', createError)
                                     }
+                                } else {
+                                    const createError = await createResponse.json()
+                                    console.warn('Could not create profile:', createError)
                                 }
-                            } else {
-                                const error = await response.json()
-                                console.warn('Could not fetch profile:', error)
+                            }
+                        } else {
+                            const error = await response.json()
+                            console.warn('Could not fetch profile:', error)
                             }
                         }
                     }

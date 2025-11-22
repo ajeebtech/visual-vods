@@ -1,8 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Play } from 'lucide-react'
+import { useUser, useSession } from '@clerk/nextjs'
+import { getCached, setCached, getCacheKey } from '@/lib/local-cache'
+import { cn } from '@/lib/utils'
 
 interface VODLink {
   url: string
@@ -20,6 +23,7 @@ interface Match {
 
 interface MatchGridProps {
   matches: Match[]
+  sessionId?: string | null
 }
 
 // Helper to get YouTube thumbnail from video ID or URL
@@ -54,10 +58,105 @@ const getTwitchThumbnail = (url: string): string | null => {
   return null
 }
 
-export default function MatchGrid({ matches }: MatchGridProps) {
+export default function MatchGrid({ matches, sessionId }: MatchGridProps) {
+  const { user } = useUser()
+  const { session: clerkSession } = useSession()
+  const [matchesWithNotes, setMatchesWithNotes] = useState<Set<string>>(new Set())
   const [displayCount, setDisplayCount] = useState(20)
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null)
   const [selectedVOD, setSelectedVOD] = useState<VODLink | null>(null)
+  
+  // Fetch matches that have notes
+  useEffect(() => {
+    const fetchMatchesWithNotes = async () => {
+      if (!sessionId || !user || !clerkSession) return
+
+      try {
+        const token = await clerkSession.getToken({ template: 'supabase' })
+        if (!token) return
+
+        const cacheKey = getCacheKey('matches-with-notes', sessionId)
+        const cached = getCached<string[] | Set<string>>(cacheKey)
+        if (cached) {
+          // Convert array to Set if needed (Sets don't serialize to JSON)
+          const notesSet = cached instanceof Set ? cached : new Set(cached)
+          setMatchesWithNotes(notesSet)
+          return
+        }
+
+        // Fetch all notes for this session
+        const response = await fetch(`/api/notes?session_id=${sessionId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+
+        if (response.ok) {
+          const notes = await response.json()
+          // Create a Set of match_hrefs that have notes
+          const matchHrefsWithNotes = new Set<string>()
+          notes.forEach((note: any) => {
+            if (note.match_href) {
+              matchHrefsWithNotes.add(note.match_href)
+            }
+          })
+          console.log(`[MatchGrid] Found ${matchHrefsWithNotes.size} matches with notes:`, Array.from(matchHrefsWithNotes))
+          console.log(`[MatchGrid] Current matches:`, matches.map(m => m.href))
+          setMatchesWithNotes(matchHrefsWithNotes)
+          // Store as array since Sets don't serialize to JSON
+          setCached(cacheKey, Array.from(matchHrefsWithNotes), 300) // Cache for 5 minutes
+        }
+      } catch (error) {
+        console.error('Error fetching matches with notes:', error)
+      }
+    }
+
+    fetchMatchesWithNotes()
+    
+    // Listen for notes-updated event to refresh
+    const handleNotesUpdated = (event: CustomEvent) => {
+      if (event.detail?.sessionId === sessionId) {
+        console.log('[MatchGrid] Notes updated, refreshing matches-with-notes')
+        // Force refresh by bypassing cache
+        const refreshNotes = async () => {
+          if (!sessionId || !user || !clerkSession) return
+          try {
+            const token = await clerkSession.getToken({ template: 'supabase' })
+            if (!token) return
+            
+            const response = await fetch(`/api/notes?session_id=${sessionId}`, {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            })
+            
+            if (response.ok) {
+              const notes = await response.json()
+              const matchHrefsWithNotes = new Set<string>()
+              notes.forEach((note: any) => {
+                if (note.match_href) {
+                  matchHrefsWithNotes.add(note.match_href)
+                }
+              })
+              console.log(`[MatchGrid] Refreshed - Found ${matchHrefsWithNotes.size} matches with notes:`, Array.from(matchHrefsWithNotes))
+              setMatchesWithNotes(matchHrefsWithNotes)
+              const cacheKey = getCacheKey('matches-with-notes', sessionId)
+              setCached(cacheKey, Array.from(matchHrefsWithNotes), 300)
+            }
+          } catch (error) {
+            console.error('Error refreshing matches with notes:', error)
+          }
+        }
+        refreshNotes()
+      }
+    }
+    
+    window.addEventListener('notes-updated', handleNotesUpdated as EventListener)
+    
+    return () => {
+      window.removeEventListener('notes-updated', handleNotesUpdated as EventListener)
+    }
+  }, [sessionId, user, clerkSession, matches])
   
   // Filter matches that have VODs
   const matchesWithVODs = matches.filter(m => m.hasVODs)
@@ -103,13 +202,18 @@ export default function MatchGrid({ matches }: MatchGridProps) {
               // Purple gradient background as fallback
               const bgGradient = `linear-gradient(135deg, rgba(147, 51, 234, 0.8) 0%, rgba(79, 70, 229, 0.8) 100%)`
               
+              const hasNotes = matchesWithNotes.has(match.href)
+              
               return (
                 <motion.div
                   key={match.matchId || index}
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: index * 0.05 }}
-                  className="relative aspect-video rounded-lg overflow-hidden cursor-pointer group"
+                  className={cn(
+                    "relative aspect-video rounded-lg overflow-hidden cursor-pointer group",
+                    hasNotes && "border-4 border-orange-500"
+                  )}
                   onClick={() => handleThumbnailClick(match)}
                 >
                   {/* Thumbnail or purple gradient background */}

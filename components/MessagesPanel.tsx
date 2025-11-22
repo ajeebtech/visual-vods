@@ -77,24 +77,24 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
   const getCachedMessages = (conversationId?: string, friendId?: string): { messages: Message[], readReceipts: Record<string, string> } => {
     const key = getMessagesCacheKey(conversationId, friendId)
     const cached = getCached<CachedMessages>(key)
-    if (cached) {
-      return {
+      if (cached) {
+          return {
         messages: cached.messages || [],
         readReceipts: cached.readReceipts || {}
-      }
+          }
     }
     return { messages: [], readReceipts: {} }
   }
   
   const saveCachedMessages = (messages: Message[], readReceipts: Record<string, string>, conversationId?: string, friendId?: string) => {
     const key = getMessagesCacheKey(conversationId, friendId)
-    const cacheData: CachedMessages = {
-      messages: messages.slice(-50), // Only cache last 50 messages
-      readReceipts,
-      timestamp: Date.now(),
-      conversationId,
-      friendId
-    }
+      const cacheData: CachedMessages = {
+        messages: messages.slice(-50), // Only cache last 50 messages
+        readReceipts,
+        timestamp: Date.now(),
+        conversationId,
+        friendId
+      }
     setCached(key, cacheData, 3600) // 1 hour
   }
 
@@ -889,12 +889,12 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
                   <p className="text-gray-900 font-medium text-base mb-1">No conversations yet</p>
                   <p className="text-gray-500 text-sm mb-4">Add friends to start messaging</p>
                 </div>
-                <button
-                  onClick={() => setShowCreateGroup(true)}
+            <button
+              onClick={() => setShowCreateGroup(true)}
                   className="px-6 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-lg font-medium transition-colors"
-                >
-                  Create a group chat
-                </button>
+            >
+              Create a group chat
+            </button>
               </div>
             )}
           </div>

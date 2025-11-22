@@ -325,6 +325,16 @@ export default function NotesPanel({
         const cacheKey = getCacheKey('notes', sessionId, matchHref, vodUrl)
         setCached(cacheKey, updatedNotes, 60) // 1 minute TTL
         
+        // Invalidate matches-with-notes cache so border appears
+        invalidateCache(getCacheKey('matches-with-notes', sessionId) + '*')
+        
+        // Dispatch event to trigger refresh of matches-with-notes in other components
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('notes-updated', { 
+            detail: { sessionId, matchHref } 
+          }))
+        }
+        
         // Scroll to bottom to show new message
         setTimeout(() => {
           messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })

@@ -112,11 +112,14 @@ export default async function handler(
         const matchPromises: Array<Promise<MatchData | null>> = []
         
         // Helper function to extract VOD links from HTML
-        const extractVodLinks = ($context: cheerio.Cheerio<cheerio.Element>): Array<{ url: string; platform: 'youtube' | 'twitch' | 'other'; embedUrl?: string }> => {
+        const extractVodLinks = ($context: cheerio.CheerioAPI | cheerio.Cheerio<any>): Array<{ url: string; platform: 'youtube' | 'twitch' | 'other'; embedUrl?: string }> => {
           const vodLinks: Array<{ url: string; platform: 'youtube' | 'twitch' | 'other'; embedUrl?: string }> = []
           
-          $context.find('a[href*="youtube.com"], a[href*="youtu.be"], a[href*="twitch.tv"]').each((_, vodElement) => {
-            const vodUrl = $context.find(vodElement).attr('href') || ''
+          // Handle both CheerioAPI and Cheerio types
+          const $selection = 'root' in $context ? $context('body') : $context
+          
+          $selection.find('a[href*="youtube.com"], a[href*="youtu.be"], a[href*="twitch.tv"]').each((_, vodElement) => {
+            const vodUrl = $selection.find(vodElement).attr('href') || ''
             let platform: 'youtube' | 'twitch' | 'other' = 'other'
             let embedUrl = vodUrl
             
@@ -298,10 +301,6 @@ export default async function handler(
         }
         
         console.log(`Found ${finalMatchElements.length} matches on player page`)
-        console.log(`Potential match links found: ${potentialMatches.length}`)
-        if (potentialMatches.length > 0) {
-          console.log('Sample potential matches:', potentialMatches.slice(0, 5))
-        }
         
         if (finalMatchElements.length === 0) {
           // Additional debugging: log a sample of links found

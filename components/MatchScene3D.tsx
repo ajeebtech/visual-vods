@@ -8,6 +8,7 @@ import { X } from 'lucide-react'
 import * as THREE from 'three'
 import { useUser, useSession } from '@clerk/nextjs'
 import NotesPanel from '@/components/NotesPanel'
+import { getCached, setCached, getCacheKey } from '@/lib/local-cache'
 import {
   Select,
   SelectContent,
@@ -85,8 +86,8 @@ const getYouTubeThumbnail = (url: string): string | null => {
 // Generate scattered positions with older matches further back
 function generateMatchPositions(count: number): Array<[number, number, number]> {
   const positions: Array<[number, number, number]> = []
-  const spread = 8 // Reduced spread - how far to spread on x and y axes
-  const minDistance = 2.5 // Minimum distance between thumbnails to avoid overlap
+  const spread = 5 // Reduced spread - how far to spread on x and y axes
+  const minDistance = 1.8 // Minimum distance between thumbnails to avoid overlap
   const usedPositions: Array<[number, number]> = []
   
   for (let i = 0; i < count; i++) {
@@ -148,6 +149,7 @@ function MatchTile({
   index,
   onThumbnailLoad,
   isVisible,
+  hasNotes = false,
 }: {
   position: [number, number, number]
   thumbnail: string | null
@@ -156,13 +158,17 @@ function MatchTile({
   index: number
   onThumbnailLoad?: (index: number) => void
   isVisible: boolean
+  hasNotes?: boolean
 }) {
   const meshRef = useRef<THREE.Mesh>(null)
+  const borderGroupRef = useRef<THREE.Group>(null)
   const [hovered, setHovered] = useState(false)
   const [texture, setTexture] = useState<THREE.Texture | null>(null)
   const opacityRef = useRef(0)
   const [shouldAnimate, setShouldAnimate] = useState(false)
   const animationStartTime = useRef<number | null>(null)
+  const targetScaleRef = useRef(1.0)
+  const currentScaleRef = useRef(1.0)
   
   // Load texture
   useEffect(() => {
@@ -223,7 +229,12 @@ function MatchTile({
     }
   }, [isVisible, index])
   
-  // Smooth fade-in animation using useFrame
+  // Update target scale when hover state changes
+  useEffect(() => {
+    targetScaleRef.current = hovered ? 1.2 : 1.0
+  }, [hovered])
+  
+  // Smooth fade-in animation and hover scale using useFrame
   useFrame((state, delta) => {
     if (shouldAnimate && meshRef.current) {
       if (animationStartTime.current === null) {
@@ -238,11 +249,28 @@ function MatchTile({
       const eased = 1 - Math.pow(1 - progress, 3)
       opacityRef.current = eased
       
+      // Smoothly interpolate scale towards target (slow animation)
+      const lerpSpeed = 0.08 // Slower = smoother animation (0.05-0.15 range)
+      currentScaleRef.current = THREE.MathUtils.lerp(
+        currentScaleRef.current,
+        targetScaleRef.current,
+        lerpSpeed
+      )
+      
       // Update material opacity
       if (meshRef.current.material) {
         const material = meshRef.current.material as THREE.MeshStandardMaterial
         material.opacity = opacityRef.current
         material.needsUpdate = true
+      }
+      
+      // Apply scale with base fade-in scale
+      const baseScale = opacityRef.current * 0.95 + 0.05 // Scale from 0.05 to 1.0 as it fades in
+      meshRef.current.scale.setScalar(baseScale * currentScaleRef.current)
+      
+      // Update border group scale to match thumbnail
+      if (borderGroupRef.current) {
+        borderGroupRef.current.scale.setScalar(currentScaleRef.current)
       }
     }
   })
@@ -283,6 +311,60 @@ function MatchTile({
           />
         )}
       </mesh>
+      
+      {/* Orange border if match has notes - using a frame made of 4 planes */}
+      {hasNotes && (
+        <group ref={borderGroupRef}>
+          {/* Top border */}
+          <mesh rotation={[0, 0, 0]} position={[0, 0.5625, 0.001]}>
+            <planeGeometry args={[2.0, 0.05]} />
+            <meshStandardMaterial 
+              color={new THREE.Color(0xff6600)}
+              side={THREE.DoubleSide}
+              transparent={true}
+              opacity={opacityRef.current}
+              emissive={new THREE.Color(0xff6600)}
+              emissiveIntensity={0.8}
+            />
+          </mesh>
+          {/* Bottom border */}
+          <mesh rotation={[0, 0, 0]} position={[0, -0.5625, 0.001]}>
+            <planeGeometry args={[2.0, 0.05]} />
+            <meshStandardMaterial 
+              color={new THREE.Color(0xff6600)}
+              side={THREE.DoubleSide}
+              transparent={true}
+              opacity={opacityRef.current}
+              emissive={new THREE.Color(0xff6600)}
+              emissiveIntensity={0.8}
+            />
+          </mesh>
+          {/* Left border */}
+          <mesh rotation={[0, 0, 0]} position={[-1.0, 0, 0.001]}>
+            <planeGeometry args={[0.05, 1.125]} />
+            <meshStandardMaterial 
+              color={new THREE.Color(0xff6600)}
+              side={THREE.DoubleSide}
+              transparent={true}
+              opacity={opacityRef.current}
+              emissive={new THREE.Color(0xff6600)}
+              emissiveIntensity={0.8}
+            />
+          </mesh>
+          {/* Right border */}
+          <mesh rotation={[0, 0, 0]} position={[1.0, 0, 0.001]}>
+            <planeGeometry args={[0.05, 1.125]} />
+            <meshStandardMaterial 
+              color={new THREE.Color(0xff6600)}
+              side={THREE.DoubleSide}
+              transparent={true}
+              opacity={opacityRef.current}
+              emissive={new THREE.Color(0xff6600)}
+              emissiveIntensity={0.8}
+            />
+          </mesh>
+        </group>
+      )}
       
       {/* Score and team info below thumbnail using HTML overlay */}
       {match.matchInfo && (
@@ -353,6 +435,9 @@ export default function MatchScene3D({
   initialSessionId,
   onAllThumbnailsLoaded
 }: MatchScene3DProps) {
+  const { user } = useUser()
+  const { session: clerkSession } = useSession()
+  const [matchesWithNotes, setMatchesWithNotes] = useState<Set<string>>(new Set())
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null)
   const [selectedVOD, setSelectedVOD] = useState<VODLink | null>(null)
   const [loadedThumbnails, setLoadedThumbnails] = useState<Set<number>>(new Set())
@@ -362,7 +447,6 @@ export default function MatchScene3D({
   const [isSavingSession, setIsSavingSession] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const youtubeIframeRef = useRef<HTMLIFrameElement | null>(null)
-  const { session: clerkSession } = useSession()
   
   // Update sessionId when initialSessionId changes (when loading an old session)
   useEffect(() => {
@@ -370,6 +454,98 @@ export default function MatchScene3D({
       setSessionId(initialSessionId)
     }
   }, [initialSessionId])
+
+  // Fetch matches that have notes
+  useEffect(() => {
+    const fetchMatchesWithNotes = async () => {
+      if (!sessionId || !user || !clerkSession) return
+
+      try {
+        const token = await clerkSession.getToken({ template: 'supabase' })
+        if (!token) return
+
+        const cacheKey = getCacheKey('matches-with-notes', sessionId)
+        const cached = getCached<string[] | Set<string>>(cacheKey)
+        if (cached) {
+          // Convert array to Set if needed (Sets don't serialize to JSON)
+          const notesSet = cached instanceof Set ? cached : new Set(cached)
+          setMatchesWithNotes(notesSet)
+          return
+        }
+
+        // Fetch all notes for this session
+        const response = await fetch(`/api/notes?session_id=${sessionId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+
+        if (response.ok) {
+          const notes = await response.json()
+          // Create a Set of match_hrefs that have notes
+          const matchHrefsWithNotes = new Set<string>()
+          notes.forEach((note: any) => {
+            if (note.match_href) {
+              matchHrefsWithNotes.add(note.match_href)
+            }
+          })
+          console.log(`[MatchScene3D] Found ${matchHrefsWithNotes.size} matches with notes:`, Array.from(matchHrefsWithNotes))
+          console.log(`[MatchScene3D] All match hrefs in scene:`, filteredMatches.map(m => m.href))
+          setMatchesWithNotes(matchHrefsWithNotes)
+          // Store as array since Sets don't serialize to JSON
+          setCached(cacheKey, Array.from(matchHrefsWithNotes), 300) // Cache for 5 minutes
+        }
+      } catch (error) {
+        console.error('Error fetching matches with notes:', error)
+      }
+    }
+
+    fetchMatchesWithNotes()
+    
+    // Listen for notes-updated event to refresh
+    const handleNotesUpdated = (event: CustomEvent) => {
+      if (event.detail?.sessionId === sessionId) {
+        console.log('[MatchScene3D] Notes updated, refreshing matches-with-notes')
+        // Force refresh by bypassing cache
+        const refreshNotes = async () => {
+          if (!sessionId || !user || !clerkSession) return
+          try {
+            const token = await clerkSession.getToken({ template: 'supabase' })
+            if (!token) return
+            
+            const response = await fetch(`/api/notes?session_id=${sessionId}`, {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            })
+            
+            if (response.ok) {
+              const notes = await response.json()
+              const matchHrefsWithNotes = new Set<string>()
+              notes.forEach((note: any) => {
+                if (note.match_href) {
+                  matchHrefsWithNotes.add(note.match_href)
+                }
+              })
+              console.log(`[MatchScene3D] Refreshed - Found ${matchHrefsWithNotes.size} matches with notes:`, Array.from(matchHrefsWithNotes))
+              setMatchesWithNotes(matchHrefsWithNotes)
+              const cacheKey = getCacheKey('matches-with-notes', sessionId)
+              setCached(cacheKey, Array.from(matchHrefsWithNotes), 300)
+            }
+          } catch (error) {
+            console.error('Error refreshing matches with notes:', error)
+          }
+        }
+        refreshNotes()
+      }
+    }
+    
+    window.addEventListener('notes-updated', handleNotesUpdated as EventListener)
+    
+    return () => {
+      window.removeEventListener('notes-updated', handleNotesUpdated as EventListener)
+    }
+  }, [sessionId, user, clerkSession])
   
   // Filter only YouTube VODs with embed URLs and remove duplicates
   const youtubeMatches = useMemo(() => {
@@ -675,6 +851,10 @@ export default function MatchScene3D({
             
             // Check if this match should be visible (for fade-in animation)
             const isVisible = displayIndex < visibleMatches
+            const hasNotes = matchesWithNotes.has(match.href)
+            if (hasNotes) {
+              console.log(`[MatchScene3D] Match ${match.href} has notes!`)
+            }
             
             return (
               <MatchTile
@@ -685,6 +865,7 @@ export default function MatchScene3D({
                 onSelect={() => handleThumbnailClick(match)}
                 index={originalIndex >= 0 ? originalIndex : displayIndex}
                 isVisible={isVisible}
+                hasNotes={hasNotes}
                 onThumbnailLoad={(idx) => {
                   setLoadedThumbnails(prev => new Set([...Array.from(prev), idx]))
                 }}
