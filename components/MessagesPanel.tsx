@@ -643,6 +643,9 @@ export default function MessagesPanel({ friends, onClose, sessionToShare }: Mess
     participantCount?: number
   }> = []
 
+  // Track which friends already have conversations to avoid duplicates
+  const friendsWithConversations = new Set<string>()
+
   // Add group chats
   conversations
     .filter(c => c.type === 'group')
@@ -660,19 +663,40 @@ export default function MessagesPanel({ friends, onClose, sessionToShare }: Mess
       })
     })
 
-  // Add direct message conversations (from friends)
-  friends.forEach(friend => {
-    const conversation = conversations.find(c => c.userId === friend.friend.id)
-    allConversations.push({
-      id: friend.friend.id,
-      type: 'direct',
-      name: friend.friend.username,
-      avatar_url: friend.friend.avatar_url,
-      lastMessage: conversation?.lastMessage || '',
-      lastMessageTime: conversation?.lastMessageTime || '',
-      unreadCount: conversation?.unreadCount || 0,
-      userId: friend.friend.id
+  // Add direct message conversations from conversations array
+  conversations
+    .filter(c => c.type === 'direct' && c.userId)
+    .forEach(conv => {
+      if (conv.userId) {
+        friendsWithConversations.add(conv.userId)
+        allConversations.push({
+          id: conv.userId,
+          type: 'direct',
+          name: conv.name || conv.username || 'Unknown',
+          avatar_url: conv.avatar_url,
+          lastMessage: conv.lastMessage,
+          lastMessageTime: conv.lastMessageTime,
+          unreadCount: conv.unreadCount,
+          userId: conv.userId,
+          conversationId: conv.conversationId
+        })
+      }
     })
+
+  // Add friends that don't already have a conversation entry
+  friends.forEach(friend => {
+    if (!friendsWithConversations.has(friend.friend.id)) {
+      allConversations.push({
+        id: friend.friend.id,
+        type: 'direct',
+        name: friend.friend.username,
+        avatar_url: friend.friend.avatar_url,
+        lastMessage: '',
+        lastMessageTime: '',
+        unreadCount: 0,
+        userId: friend.friend.id
+      })
+    }
   })
 
   // Sort by last message time

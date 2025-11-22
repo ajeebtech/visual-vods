@@ -194,7 +194,7 @@ export default function Home() {
     setTeam2(value)
     setTeam2Id(teamId || null)
     // Don't clear player - allow filtering player matches by teams
-  }
+    }
 
   const handlePlayerNameChange = (value: string, id?: string) => {
     setPlayerName(value)
@@ -347,8 +347,8 @@ export default function Home() {
         if (playerId && !seenNames.has(item.value)) {
           players.push({ name: item.value, id: playerId })
           seenNames.add(item.value)
-        }
       }
+    }
     }
     
     return players

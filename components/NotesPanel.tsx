@@ -471,7 +471,7 @@ export default function NotesPanel({
             transition={{ type: "spring", stiffness: 400, damping: 17 }}
           >
             <Button
-              onClick={handleAddNote}
+            onClick={handleAddNote}
               isDisabled={!newNoteText.trim()}
               className="bg-[#9146FF] hover:bg-[#772CE8] text-white disabled:opacity-50 disabled:cursor-not-allowed rounded-lg"
               size="sm"

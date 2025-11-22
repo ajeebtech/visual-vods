@@ -143,6 +143,10 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
     const [filteredProjects, setFilteredProjects] = useState<Array<{ id: string, name: string, description: string | null, created_at: string }>>([])
     const [filteredSessionsForSearch, setFilteredSessionsForSearch] = useState<Session[]>([])
     const [sessionToShare, setSessionToShare] = useState<Session | null>(null)
+    // Search query for the expanded content area (Find input)
+    const [findSearchQuery, setFindSearchQuery] = useState('')
+    const [filteredProjectsForFind, setFilteredProjectsForFind] = useState<Array<{ id: string, name: string, description: string | null, created_at: string }>>([])
+    const [filteredSessionsForFind, setFilteredSessionsForFind] = useState<Session[]>([])
     const [showShareModal, setShowShareModal] = useState(false)
     const [shareModalSession, setShareModalSession] = useState<Session | null>(null)
 
@@ -508,7 +512,7 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
         }
     }, [isExpanded, showProjects, clerkUser, clerkSession])
 
-    // Filter projects and sessions based on search query
+    // Filter projects and sessions based on search query in Projects section
     useEffect(() => {
         if (projectSearchQuery.trim() === '') {
             setFilteredProjects(projects)
@@ -533,6 +537,32 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
             setFilteredSessionsForSearch(filteredSessions)
         }
     }, [projectSearchQuery, projects, sessions])
+
+    // Filter projects and sessions based on Find search query
+    useEffect(() => {
+        if (findSearchQuery.trim() === '') {
+            setFilteredProjectsForFind([])
+            setFilteredSessionsForFind([])
+        } else {
+            const query = findSearchQuery.toLowerCase().trim()
+            // Filter projects
+            const filtered = projects.filter(project => 
+                project.name.toLowerCase().includes(query) ||
+                (project.description && project.description.toLowerCase().includes(query))
+            )
+            setFilteredProjectsForFind(filtered)
+            
+            // Filter sessions
+            const filteredSessions = sessions.filter(session =>
+                (session.title || 'Untitled Session').toLowerCase().includes(query) ||
+                (session.team1_name && session.team1_name.toLowerCase().includes(query)) ||
+                (session.team2_name && session.team2_name.toLowerCase().includes(query)) ||
+                (session.tournament && session.tournament.toLowerCase().includes(query)) ||
+                (session.player_name && session.player_name.toLowerCase().includes(query))
+            )
+            setFilteredSessionsForFind(filteredSessions)
+        }
+    }, [findSearchQuery, projects, sessions])
 
     // Handle share session - open modal with friends and group chats
     const handleShareSession = async (session: Session, e: React.MouseEvent) => {
@@ -1406,88 +1436,36 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                                         Create New Project
                                     </button>
 
-                                    {/* Search for Projects and Sessions */}
-                                    <div className="space-y-2 mb-4">
-                                        <label className="text-xs font-medium text-gray-700">Search Projects & Sessions</label>
-                                        <div className="relative">
-                                            <input
-                                                type="text"
-                                                value={projectSearchQuery}
-                                                onChange={(e) => setProjectSearchQuery(e.target.value)}
-                                                placeholder="Search projects and sessions..."
-                                                className="w-full px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                            />
-                                            <Search className="absolute right-3 top-2.5 w-4 h-4 text-gray-400" />
-                                        </div>
-                                    </div>
-
                                     {/* Projects List */}
                                     {isLoadingProjects ? (
                                         <p className="text-xs text-gray-500">Loading projects...</p>
                                     ) : (
                                         <>
-                                            {/* Projects Results */}
-                                            {(projectSearchQuery.trim() === '' ? projects : filteredProjects).length > 0 && (
-                                                <div className="space-y-2 mb-4">
-                                                    <label className="text-xs font-medium text-gray-700">Projects</label>
-                                                    <div className="space-y-1 max-h-48 overflow-y-auto">
-                                                        {(projectSearchQuery.trim() === '' ? projects : filteredProjects).map((project) => (
-                                                <button
-                                                    key={project.id}
-                                                    onClick={() => {
-                                                        setSelectedProject(project)
-                                                        setShowEditProject(true)
-                                                    }}
-                                                    className="w-full px-3 py-2 text-left text-sm bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200 group"
-                                                >
-                                                    <p className="font-medium text-gray-900 truncate">
-                                                        {project.name}
-                                                    </p>
-                                                    <p className="text-xs text-gray-500 mt-0.5">
-                                                        {new Date(project.created_at).toLocaleDateString()}
-                                                    </p>
-                                                </button>
-                                            ))}
-                                                    </div>
-                                        </div>
-                                            )}
-
-                                            {/* Sessions Results */}
-                                            {projectSearchQuery.trim() !== '' && filteredSessionsForSearch.length > 0 && (
-                                                <div className="space-y-2">
-                                                    <label className="text-xs font-medium text-gray-700">Sessions</label>
-                                                    <div className="space-y-1 max-h-48 overflow-y-auto">
-                                                        {filteredSessionsForSearch.map((session) => (
+                                            {projects.length > 0 ? (
+                                                <div className="space-y-2 mt-4">
+                                                    <label className="text-xs font-medium text-gray-700">Latest Projects</label>
+                                                    <div className="space-y-1 max-h-64 overflow-y-auto">
+                                                        {projects.map((project) => (
                                                             <button
-                                                                key={session.id}
-                                                                onClick={() => handleLoadSession(session)}
+                                                                key={project.id}
+                                                                onClick={() => {
+                                                                    setSelectedProject(project)
+                                                                    setShowEditProject(true)
+                                                                }}
                                                                 className="w-full px-3 py-2 text-left text-sm bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200 group"
                                                             >
                                                                 <p className="font-medium text-gray-900 truncate">
-                                                                    {session.title || 'Untitled Session'}
+                                                                    {project.name}
                                                                 </p>
                                                                 <p className="text-xs text-gray-500 mt-0.5">
-                                                                    {formatDate(session.created_at)}
+                                                                    {new Date(project.created_at).toLocaleDateString()}
                                                                 </p>
-                                                                {session.matches_data && Array.isArray(session.matches_data) && (
-                                                                    <p className="text-xs text-gray-400 mt-0.5">
-                                                                        {session.matches_data.length} matches
-                                                                    </p>
-                                                                )}
                                                             </button>
                                                         ))}
                                                     </div>
                                                 </div>
-                                            )}
-
-                                            {/* No Results */}
-                                            {projectSearchQuery.trim() !== '' && filteredProjects.length === 0 && filteredSessionsForSearch.length === 0 && (
-                                                <p className="text-xs text-gray-500">No projects or sessions found</p>
-                                            )}
-
-                                            {/* Empty State (only show when no search query) */}
-                                            {projectSearchQuery.trim() === '' && projects.length === 0 && (
-                                                <p className="text-xs text-gray-500">No projects yet</p>
+                                            ) : (
+                                                <p className="text-xs text-gray-500 mt-4">No projects yet</p>
                                             )}
                                         </>
                                     )}
@@ -1506,24 +1484,96 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                                 className="mt-4 flex-1 flex flex-col"
                             >
                                 {/* Controls */}
-                                <div className="flex items-center justify-between mb-8 text-sm text-gray-600">
-                                    <button className="flex items-center gap-2 hover:text-black">
-                                        <Search className="w-4 h-4" />
-                                        Find
-                                    </button>
+                                <div className="flex items-center justify-between mb-4 text-sm text-gray-600">
+                                    <div className="relative flex-1 mr-4">
+                                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                        <input
+                                            type="text"
+                                            value={findSearchQuery}
+                                            onChange={(e) => setFindSearchQuery(e.target.value)}
+                                            placeholder="Find projects and sessions..."
+                                            className="w-full pl-10 pr-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        />
+                                    </div>
                                     <button className="flex items-center gap-1 hover:text-black">
                                         Sort
                                         <AlignLeft className="w-4 h-4 rotate-180" />
                                     </button>
                                 </div>
 
-                                {/* Empty State */}
-                                <div className="flex-1 flex flex-col items-center justify-center text-center text-gray-500">
-                                    <h3 className="text-lg font-medium text-black mb-2">No saved spirals yet</h3>
-                                    <p className="text-sm max-w-[200px]">
-                                        Save your favorite spirals to access them quickly here.
-                                    </p>
-                                </div>
+                                {/* Search Results */}
+                                {findSearchQuery.trim() !== '' ? (
+                                    <div className="flex-1 overflow-y-auto space-y-4">
+                                        {/* Projects Results */}
+                                        {filteredProjectsForFind.length > 0 && (
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-medium text-gray-700">Projects</label>
+                                                <div className="space-y-1">
+                                                    {filteredProjectsForFind.map((project) => (
+                                                        <button
+                                                            key={project.id}
+                                                            onClick={() => {
+                                                                setSelectedProject(project)
+                                                                setShowEditProject(true)
+                                                            }}
+                                                            className="w-full px-3 py-2 text-left text-sm bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
+                                                        >
+                                                            <p className="font-medium text-gray-900 truncate">
+                                                                {project.name}
+                                                            </p>
+                                                            <p className="text-xs text-gray-500 mt-0.5">
+                                                                {new Date(project.created_at).toLocaleDateString()}
+                                                            </p>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Sessions Results */}
+                                        {filteredSessionsForFind.length > 0 && (
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-medium text-gray-700">Sessions</label>
+                                                <div className="space-y-1">
+                                                    {filteredSessionsForFind.map((session) => (
+                                                        <button
+                                                            key={session.id}
+                                                            onClick={() => handleLoadSession(session)}
+                                                            className="w-full px-3 py-2 text-left text-sm bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
+                                                        >
+                                                            <p className="font-medium text-gray-900 truncate">
+                                                                {session.title || 'Untitled Session'}
+                                                            </p>
+                                                            <p className="text-xs text-gray-500 mt-0.5">
+                                                                {formatDate(session.created_at)}
+                                                            </p>
+                                                            {session.matches_data && Array.isArray(session.matches_data) && (
+                                                                <p className="text-xs text-gray-400 mt-0.5">
+                                                                    {session.matches_data.length} matches
+                                                                </p>
+                                                            )}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* No Results */}
+                                        {filteredProjectsForFind.length === 0 && filteredSessionsForFind.length === 0 && (
+                                            <div className="flex-1 flex flex-col items-center justify-center text-center text-gray-500 py-8">
+                                                <p className="text-sm">No projects or sessions found</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    /* Empty State */
+                                    <div className="flex-1 flex flex-col items-center justify-center text-center text-gray-500">
+                                        <h3 className="text-lg font-medium text-black mb-2">search for your projects and sessions here</h3>
+                                        <p className="text-sm max-w-[200px]">
+                                            they will appear here after you create them.
+                                        </p>
+                                    </div>
+                                )}
                             </motion.div>
                         )}
                     </AnimatePresence>

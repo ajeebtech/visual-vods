@@ -62,17 +62,17 @@ export function SettingsModal({ open, onOpenChange, trigger, username, avatarUrl
               <div className="flex flex-col gap-1">
                 {sidebarNavItems.map((item, index) => (
                   <motion.button
-                    key={item.value}
+                  key={item.value}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.05, duration: 0.2 }}
-                    onClick={() => setActiveTab(item.value)}
-                    className={cn(
+                  onClick={() => setActiveTab(item.value)}
+                  className={cn(
                       "relative flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all duration-200",
-                      activeTab === item.value
+                    activeTab === item.value
                         ? "bg-indigo-50 text-indigo-600 font-medium"
                         : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                    )}
+                  )}
                     whileHover={{ scale: 1.02, x: 4 }}
                     whileTap={{ scale: 0.98 }}
                   >
@@ -87,7 +87,7 @@ export function SettingsModal({ open, onOpenChange, trigger, username, avatarUrl
                     <item.icon className="h-5 w-5 flex-shrink-0 relative z-10" />
                     <span className="text-sm relative z-10">{item.title}</span>
                   </motion.button>
-                ))}
+              ))}
               </div>
             </div>
           </div>
@@ -338,21 +338,21 @@ function ProfileSettings({ username, avatarUrl, onUpdate }: { username?: string;
     <div className="space-y-6">
       {/* Message Display */}
       <AnimatePresence>
-        {message && (
+      {message && (
           <motion.div
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.95 }}
             transition={{ type: "spring", stiffness: 500, damping: 30 }}
             className={`p-4 rounded-xl border ${
-              message.type === 'success' 
+          message.type === 'success' 
                 ? 'bg-green-50 text-green-700 border-green-200' 
                 : 'bg-red-50 text-red-700 border-red-200'
             }`}
           >
-            <p className="text-sm font-medium">{message.text}</p>
+          <p className="text-sm font-medium">{message.text}</p>
           </motion.div>
-        )}
+      )}
       </AnimatePresence>
 
       {/* Picture Section */}
@@ -370,13 +370,13 @@ function ProfileSettings({ username, avatarUrl, onUpdate }: { username?: string;
             transition={{ type: "spring", stiffness: 400, damping: 17 }}
           >
             <Avatar className="h-20 w-20 ring-4 ring-gray-100 cursor-pointer">
-              {currentAvatarUrl ? (
-                <AvatarImage src={currentAvatarUrl} alt="Profile picture" />
-              ) : null}
+            {currentAvatarUrl ? (
+              <AvatarImage src={currentAvatarUrl} alt="Profile picture" />
+            ) : null}
               <AvatarFallback className="bg-indigo-500 text-white text-xl font-semibold">
-                {currentUsername ? currentUsername.substring(0, 2).toUpperCase() : 'JD'}
-              </AvatarFallback>
-            </Avatar>
+              {currentUsername ? currentUsername.substring(0, 2).toUpperCase() : 'JD'}
+            </AvatarFallback>
+          </Avatar>
           </motion.div>
           <div className="flex flex-col gap-3">
             <input
@@ -388,14 +388,14 @@ function ProfileSettings({ username, avatarUrl, onUpdate }: { username?: string;
               disabled={isUploading}
             />
             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-              <Button
-                onClick={handleAvatarClick}
-                disabled={isUploading}
+            <Button
+              onClick={handleAvatarClick}
+              disabled={isUploading}
                 className="w-fit bg-indigo-600 text-white hover:bg-indigo-700 transition-colors rounded-lg"
-              >
-                <Upload className="w-4 h-4 mr-2" />
+            >
+              <Upload className="w-4 h-4 mr-2" />
                 {isUploading ? 'Uploading...' : 'Change Avatar'}
-              </Button>
+            </Button>
             </motion.div>
             <p className="text-xs text-gray-500">JPG, PNG or GIF. Max size 5MB</p>
           </div>
@@ -425,13 +425,13 @@ function ProfileSettings({ username, avatarUrl, onUpdate }: { username?: string;
       {/* Save Changes Button */}
       <div className="pt-2">
         <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-          <Button
-            onClick={handleSaveChanges}
-            disabled={isSaving}
+        <Button
+          onClick={handleSaveChanges}
+          disabled={isSaving}
             className="bg-indigo-600 text-white hover:bg-indigo-700 transition-colors rounded-lg"
-          >
-            {isSaving ? 'Saving...' : 'Save Changes'}
-          </Button>
+        >
+          {isSaving ? 'Saving...' : 'Save Changes'}
+        </Button>
         </motion.div>
       </div>
     </div>
