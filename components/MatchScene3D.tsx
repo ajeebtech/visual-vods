@@ -59,6 +59,7 @@ interface MatchScene3DProps {
   playerName?: string
   initialSessionId?: string | null
   onAllThumbnailsLoaded?: () => void
+  sessionOwner?: { username: string, avatar_url: string | null, user_id: string } | null
 }
 
 // Helper to get YouTube thumbnail from video ID or URL
@@ -433,7 +434,8 @@ export default function MatchScene3D({
   tournament, 
   playerName,
   initialSessionId,
-  onAllThumbnailsLoaded
+  onAllThumbnailsLoaded,
+  sessionOwner
 }: MatchScene3DProps) {
   const { user } = useUser()
   const { session: clerkSession } = useSession()
@@ -878,14 +880,14 @@ export default function MatchScene3D({
       {/* Date filter dropdown - top right */}
       <div className="fixed top-4 right-4 z-40">
         <Select value={dateFilter} onValueChange={(value: '30' | '50' | '90' | 'all') => setDateFilter(value)}>
-          <SelectTrigger className="w-32 bg-white/90 backdrop-blur-sm">
+          <SelectTrigger className="w-32 bg-white/90 backdrop-blur-sm text-gray-900">
             <SelectValue placeholder="Filter by date" />
           </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All matches</SelectItem>
-            <SelectItem value="30">Last 30 days</SelectItem>
-            <SelectItem value="50">Last 50 days</SelectItem>
-            <SelectItem value="90">Last 90 days</SelectItem>
+          <SelectContent className="bg-white text-gray-900">
+            <SelectItem value="all" className="text-gray-900 focus:text-gray-900 focus:bg-gray-100">All matches</SelectItem>
+            <SelectItem value="30" className="text-gray-900 focus:text-gray-900 focus:bg-gray-100">Last 30 days</SelectItem>
+            <SelectItem value="50" className="text-gray-900 focus:text-gray-900 focus:bg-gray-100">Last 50 days</SelectItem>
+            <SelectItem value="90" className="text-gray-900 focus:text-gray-900 focus:bg-gray-100">Last 90 days</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -894,6 +896,27 @@ export default function MatchScene3D({
       <div className="fixed top-4 left-24 z-40 bg-white/90 backdrop-blur-sm rounded-lg px-4 py-2 shadow-lg">
         <div className="flex items-center justify-between gap-4">
           <div>
+            {/* Session owner info */}
+            {sessionOwner && (
+              <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-200">
+                {sessionOwner.avatar_url ? (
+                  <img
+                    src={sessionOwner.avatar_url}
+                    alt={sessionOwner.username}
+                    className="w-5 h-5 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-5 h-5 rounded-full bg-gray-300 flex items-center justify-center">
+                    <span className="text-xs text-gray-600 font-medium">
+                      {sessionOwner.username.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                )}
+                <p className="text-xs text-gray-600">
+                  Created by <span className="font-medium text-gray-900">{sessionOwner.username}</span>
+                </p>
+              </div>
+            )}
             <p className="text-sm font-medium text-gray-900">
               {filteredMatches.length} matches {dateFilter !== 'all' ? `(last ${dateFilter}d)` : ''} • {matchesToDisplay.length} visible • {loadedThumbnails.size} thumbnails loaded
             </p>

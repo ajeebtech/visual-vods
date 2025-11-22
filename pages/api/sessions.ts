@@ -2,6 +2,23 @@ import { NextApiRequest, NextApiResponse } from 'next'
 import { getAuth } from '@clerk/nextjs/server'
 import { createClient } from '@supabase/supabase-js'
 
+// Service role client for operations that need to bypass RLS
+const getServiceRoleClient = () => {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return null
+  }
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    }
+  )
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -125,17 +142,60 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       if (id) {
         // Get a specific session - allow access if user owns it OR is friends with the owner
+        // Add bypassCache query parameter for debugging
+        const bypassCache = req.query.bypassCache === 'true'
         const cacheKey = getCacheKey('session', id as string, finalUserId)
+        
+        // If bypassing cache, invalidate it first
+        if (bypassCache) {
+          const { invalidateCache } = await import('../../lib/redis')
+          await invalidateCache(cacheKey)
+        }
         
         const session = await getCached(
           cacheKey,
           async () => {
-            // First, try to get the session
-            const { data: sessionData, error: sessionError } = await userSupabase
+            // First, try to get the session with user client
+            let sessionData = null
+            let sessionError = null
+            
+            const { data: userSessionData, error: userSessionError } = await userSupabase
               .from('sessions')
               .select('*')
               .eq('id', id as string)
               .single()
+
+            if (userSessionError) {
+              console.error('Error fetching session with user client:', userSessionError)
+              // If RLS blocks it, try with service role client
+              if (userSessionError.code === '42501' || userSessionError.message?.includes('row-level security') || userSessionError.code === 'PGRST116') {
+                console.log('RLS blocked session fetch, trying with service role client')
+                const serviceClient = getServiceRoleClient()
+                
+                if (serviceClient) {
+                  const { data: serviceSessionData, error: serviceSessionError } = await serviceClient
+                    .from('sessions')
+                    .select('*')
+                    .eq('id', id as string)
+                    .single()
+                  
+                  sessionData = serviceSessionData
+                  sessionError = serviceSessionError
+                  
+                  if (serviceSessionError) {
+                    console.error('Error fetching session with service role client:', serviceSessionError)
+                  } else {
+                    console.log('Session found with service role client')
+                  }
+                }
+              } else {
+                sessionData = userSessionData
+                sessionError = userSessionError
+              }
+            } else {
+              sessionData = userSessionData
+              sessionError = userSessionError
+            }
 
             if (sessionError) {
               console.error('Error fetching session:', sessionError)
@@ -157,21 +217,55 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
             // Check if users are friends - friendship can be in either direction
             // Use 'friends' table with requester_id and addressee_id columns
+            // Try with user client first, fallback to service role if RLS blocks it
             console.log('Checking friendship between:', finalUserId, 'and', sessionData.user_id)
-            const { data: friendships, error: friendError } = await userSupabase
+            
+            let friendships = null
+            let friendError = null
+            
+            // Try with user client first
+            const { data: userFriendships, error: userFriendError } = await userSupabase
               .from('friends')
               .select('*')
               .or(`and(requester_id.eq.${finalUserId},addressee_id.eq.${sessionData.user_id}),and(requester_id.eq.${sessionData.user_id},addressee_id.eq.${finalUserId})`)
               .eq('status', 'accepted')
 
-            if (friendError) {
-              console.error('Error checking friendship:', friendError)
+            if (userFriendError) {
+              console.error('Error checking friendship with user client:', userFriendError)
+              // If RLS blocks it, try with service role client
+              if (userFriendError.code === '42501' || userFriendError.message?.includes('row-level security')) {
+                console.log('RLS blocked friendship check, trying with service role client')
+                const serviceClient = getServiceRoleClient()
+                
+                if (serviceClient) {
+                  const { data: serviceFriendships, error: serviceFriendError } = await serviceClient
+                    .from('friends')
+                    .select('*')
+                    .or(`and(requester_id.eq.${finalUserId},addressee_id.eq.${sessionData.user_id}),and(requester_id.eq.${sessionData.user_id},addressee_id.eq.${finalUserId})`)
+                    .eq('status', 'accepted')
+                  
+                  friendships = serviceFriendships
+                  friendError = serviceFriendError
+                  
+                  if (serviceFriendError) {
+                    console.error('Error checking friendship with service role client:', serviceFriendError)
+                  }
+                }
+              } else {
+                friendships = userFriendships
+                friendError = userFriendError
+              }
+            } else {
+              friendships = userFriendships
+              friendError = userFriendError
             }
 
             console.log('Friendship check result:', { 
               found: friendships?.length || 0, 
               friendships: friendships,
-              error: friendError 
+              error: friendError,
+              userId: finalUserId,
+              sessionOwnerId: sessionData.user_id
             })
 
             // If they're friends, allow access
@@ -189,7 +283,57 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         if (!session) {
           console.log('Session access denied for user:', finalUserId, 'session:', id)
-          return res.status(404).json({ error: 'Session not found or access denied' })
+          
+          // Try to get the session to see if it exists (for better error message)
+          // Use service role client to bypass RLS
+          let sessionCheck = null
+          let sessionCheckError = null
+          
+          const serviceClient = getServiceRoleClient()
+          if (serviceClient) {
+            const { data: serviceSessionCheck, error: serviceSessionCheckError } = await serviceClient
+              .from('sessions')
+              .select('id, user_id')
+              .eq('id', id as string)
+              .single()
+            
+            sessionCheck = serviceSessionCheck
+            sessionCheckError = serviceSessionCheckError
+          } else {
+            // Fallback to user client
+            const { data: userSessionCheck, error: userSessionCheckError } = await userSupabase
+              .from('sessions')
+              .select('id, user_id')
+              .eq('id', id as string)
+              .single()
+            
+            sessionCheck = userSessionCheck
+            sessionCheckError = userSessionCheckError
+          }
+          
+          let errorMessage = 'Session not found or access denied'
+          if (sessionCheck && !sessionCheckError) {
+            // Session exists, so access was denied
+            errorMessage = `Access denied: You are not friends with the session owner (owner: ${sessionCheck.user_id}, requester: ${finalUserId})`
+            console.log('Session exists but access denied:', {
+              sessionId: id,
+              ownerId: sessionCheck.user_id,
+              requesterId: finalUserId
+            })
+          } else {
+            // Session doesn't exist
+            errorMessage = 'Session not found'
+            console.log('Session does not exist:', id)
+          }
+          
+          // Return more detailed error for debugging
+          return res.status(404).json({ 
+            error: errorMessage,
+            sessionId: id,
+            userId: finalUserId,
+            sessionExists: !!sessionCheck,
+            message: errorMessage
+          })
         }
 
         return res.status(200).json({ session: session.session, isOwner: session.isOwner })

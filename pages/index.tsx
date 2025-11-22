@@ -37,6 +37,8 @@ export default function Home() {
 
   // Store the loaded session ID
   const [loadedSessionId, setLoadedSessionId] = useState<string | null>(null)
+  // Store session owner info
+  const [sessionOwner, setSessionOwner] = useState<{ username: string, avatar_url: string | null, user_id: string } | null>(null)
   
   const router = useRouter()
   const { user } = useUser()
@@ -45,13 +47,31 @@ export default function Home() {
   // Load session from URL query parameter
   useEffect(() => {
     const loadSessionFromUrl = async () => {
-      const { sessionId } = router.query
-      if (sessionId && typeof sessionId === 'string' && user && clerkSession && !loadedSessionId) {
+      const { sessionId, bypassCache } = router.query
+      
+      // Only load if we have a sessionId and it's different from what we've already loaded
+      if (sessionId && typeof sessionId === 'string' && user && clerkSession) {
+        // If this is the same session we already loaded, skip
+        if (loadedSessionId === sessionId) {
+          console.log('Session already loaded, skipping:', sessionId)
+          return
+        }
+        
+        // Reset loadedSessionId if we have a new sessionId to allow loading
+        if (sessionId !== loadedSessionId) {
+          setLoadedSessionId(null)
+        }
+        
         try {
+          console.log('Loading session from URL:', sessionId, 'Current loaded:', loadedSessionId)
           const token = await clerkSession.getToken({ template: 'supabase' })
-          if (!token) return
+          if (!token) {
+            console.log('No token available, waiting...')
+            return
+          }
 
-          const response = await fetch(`/api/sessions?id=${sessionId}`, {
+          const url = `/api/sessions?id=${sessionId}${bypassCache ? '&bypassCache=true' : ''}`
+          const response = await fetch(url, {
             headers: {
               'Authorization': `Bearer ${token}`
             }
@@ -60,15 +80,31 @@ export default function Home() {
           if (response.ok) {
             const data = await response.json()
             if (data.session) {
+              console.log('Session loaded successfully, setting up...')
               await handleLoadSession(data.session)
+              // Mark as loaded - this happens in handleLoadSession too, but set it here to prevent double-loading
+              setLoadedSessionId(sessionId)
               // Remove sessionId from URL after loading
-              router.replace('/', undefined, { shallow: true })
+              setTimeout(() => {
+                router.replace('/', undefined, { shallow: true })
+              }, 100)
             } else {
+              console.error('Session data missing from response:', data)
               alert('Session not found or you do not have access to it')
             }
           } else {
             const errorData = await response.json().catch(() => ({ error: 'Failed to load session' }))
-            alert(errorData.error || 'Failed to load session')
+            console.error('Error loading session:', {
+              status: response.status,
+              error: errorData,
+              sessionId: sessionId,
+              fullResponse: errorData
+            })
+            
+            // Show more detailed error message
+            const errorMessage = errorData.message || errorData.error || 'Failed to load session'
+            console.error('Full error details:', JSON.stringify(errorData, null, 2))
+            alert(`${errorMessage}\n\nCheck console for more details.`)
           }
         } catch (error) {
           console.error('Error loading session from URL:', error)
@@ -79,7 +115,7 @@ export default function Home() {
     if (router.isReady) {
       loadSessionFromUrl()
     }
-  }, [router.query.sessionId, router.isReady, user, clerkSession, loadedSessionId])
+  }, [router.query.sessionId, router.isReady, user, clerkSession])
 
   // Handle loading a session from history
   const handleLoadSession = async (session: any) => {
@@ -92,6 +128,32 @@ export default function Home() {
 
     // Set the session ID so notes can be loaded
     setLoadedSessionId(session.id)
+    
+    // Fetch session owner info if we have user_id
+    if (session.user_id && clerkSession) {
+      try {
+        const token = await clerkSession.getToken({ template: 'supabase' })
+        if (token) {
+          const ownerResponse = await fetch(`/api/profile?id=${session.user_id}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          })
+          if (ownerResponse.ok) {
+            const ownerData = await ownerResponse.json()
+            if (ownerData.data) {
+              setSessionOwner({
+                username: ownerData.data.username || 'Unknown',
+                avatar_url: ownerData.data.avatar_url || null,
+                user_id: session.user_id
+              })
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching session owner:', error)
+      }
+    }
 
     // Set the search fields
     if (session.team1_name) {
@@ -600,6 +662,7 @@ export default function Home() {
             playerName={playerName}
             initialSessionId={loadedSessionId}
             onAllThumbnailsLoaded={handleAllThumbnailsLoaded}
+            sessionOwner={sessionOwner}
           />
         )}
 

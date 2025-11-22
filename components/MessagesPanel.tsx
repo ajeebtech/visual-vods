@@ -69,12 +69,23 @@ export default function MessagesPanel({ friends, onClose, sessionToShare }: Mess
 
   // Parse session links from message content
   const parseSessionLink = (content: string): { sessionId: string | null, restOfContent: string } => {
-    // Match URLs with sessionId parameter
-    const sessionIdMatch = content.match(/[?&]sessionId=([a-zA-Z0-9-]+)/)
-    if (sessionIdMatch) {
+    // Match URLs with sessionId parameter - handle various formats
+    // Pattern: ?sessionId=xxx or &sessionId=xxx or sessionId=xxx
+    // Handle UUIDs and other session ID formats (more permissive)
+    // Match until whitespace, newline, or end of string
+    const sessionIdMatch = content.match(/[?&]sessionId=([a-zA-Z0-9_-]+)/)
+    if (sessionIdMatch && sessionIdMatch[1]) {
+      const sessionId = sessionIdMatch[1]
+      // Remove the full URL but keep the text before it
+      // Match http:// or https:// URLs
+      const urlPattern = /https?:\/\/[^\s\n]+/g
+      let restOfContent = content.replace(urlPattern, '').trim()
+      // Also remove just the sessionId= part if it appears standalone
+      restOfContent = restOfContent.replace(/sessionId=[a-zA-Z0-9_-]+/g, '').trim()
+      
       return {
-        sessionId: sessionIdMatch[1],
-        restOfContent: content.replace(/https?:\/\/[^\s]+/g, '').trim() // Remove the full URL
+        sessionId: sessionId,
+        restOfContent: restOfContent
       }
     }
     return { sessionId: null, restOfContent: content }
@@ -82,8 +93,11 @@ export default function MessagesPanel({ friends, onClose, sessionToShare }: Mess
 
   // Handle clicking on session link
   const handleSessionLinkClick = (sessionId: string) => {
-    // Navigate to the session in the same tab
-    router.push(`/?sessionId=${sessionId}`)
+    // Navigate to the session in the same tab with cache bypass for debugging
+    // Use router.push with a small delay to ensure the messages panel closes first
+    setTimeout(() => {
+      router.push(`/?sessionId=${sessionId}&bypassCache=true`)
+    }, 100)
     // Close the messages panel
     onClose()
   }
@@ -788,16 +802,27 @@ export default function MessagesPanel({ friends, onClose, sessionToShare }: Mess
                     >
                       {(() => {
                         const { sessionId, restOfContent } = parseSessionLink(message.content)
+                        // Debug logging
+                        if (message.content.includes('sessionId')) {
+                          console.log('Message with sessionId:', {
+                            content: message.content,
+                            parsedSessionId: sessionId,
+                            restOfContent: restOfContent
+                          })
+                        }
                         return (
                           <>
-                            {restOfContent && (
+                            {restOfContent && restOfContent.length > 0 && (
                               <p className="text-sm whitespace-pre-wrap break-words leading-relaxed mb-2">
                                 {restOfContent}
                               </p>
                             )}
-                            {sessionId && (
+                            {sessionId ? (
                               <motion.button
-                                onClick={() => handleSessionLinkClick(sessionId)}
+                                onClick={() => {
+                                  console.log('Opening session:', sessionId)
+                                  handleSessionLinkClick(sessionId)
+                                }}
                                 whileHover={{ scale: 1.02 }}
                                 whileTap={{ scale: 0.98 }}
                                 className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
@@ -809,8 +834,7 @@ export default function MessagesPanel({ friends, onClose, sessionToShare }: Mess
                                 <ExternalLink className="w-4 h-4" />
                                 <span className="text-sm font-medium">Open Session</span>
                               </motion.button>
-                            )}
-                            {!sessionId && (
+                            ) : (
                               <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">
                                 {message.content}
                               </p>

@@ -1094,13 +1094,13 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                                                                 >
                                                                     <Share2 className="w-3 h-3" />
                                                                 </button>
-                                                                <button
-                                                                    onClick={(e) => handleStartEdit(session, e)}
+                                                            <button
+                                                                onClick={(e) => handleStartEdit(session, e)}
                                                                     className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
-                                                                    title="Edit session name"
-                                                                >
-                                                                    <Edit2 className="w-3 h-3" />
-                                                                </button>
+                                                                title="Edit session name"
+                                                            >
+                                                                <Edit2 className="w-3 h-3" />
+                                                            </button>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -1432,24 +1432,24 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                                                     <label className="text-xs font-medium text-gray-700">Projects</label>
                                                     <div className="space-y-1 max-h-48 overflow-y-auto">
                                                         {(projectSearchQuery.trim() === '' ? projects : filteredProjects).map((project) => (
-                                                            <button
-                                                                key={project.id}
-                                                                onClick={() => {
-                                                                    setSelectedProject(project)
-                                                                    setShowEditProject(true)
-                                                                }}
-                                                                className="w-full px-3 py-2 text-left text-sm bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200 group"
-                                                            >
-                                                                <p className="font-medium text-gray-900 truncate">
-                                                                    {project.name}
-                                                                </p>
-                                                                <p className="text-xs text-gray-500 mt-0.5">
-                                                                    {new Date(project.created_at).toLocaleDateString()}
-                                                                </p>
-                                                            </button>
-                                                        ))}
+                                                <button
+                                                    key={project.id}
+                                                    onClick={() => {
+                                                        setSelectedProject(project)
+                                                        setShowEditProject(true)
+                                                    }}
+                                                    className="w-full px-3 py-2 text-left text-sm bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200 group"
+                                                >
+                                                    <p className="font-medium text-gray-900 truncate">
+                                                        {project.name}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 mt-0.5">
+                                                        {new Date(project.created_at).toLocaleDateString()}
+                                                    </p>
+                                                </button>
+                                            ))}
                                                     </div>
-                                                </div>
+                                        </div>
                                             )}
 
                                             {/* Sessions Results */}

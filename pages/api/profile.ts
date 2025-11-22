@@ -97,8 +97,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (req.method === 'GET') {
       // Get user profile with caching
+      // If an 'id' query parameter is provided, fetch that user's profile instead of the authenticated user's
+      const requestedUserId = req.query.id as string | undefined
+      const targetUserId = requestedUserId || finalUserId
+      
       const { getCached, getCacheKey } = await import('../../lib/redis')
-      const cacheKey = getCacheKey('profile', finalUserId)
+      const cacheKey = getCacheKey('profile', targetUserId)
       
       const profile = await getCached(
         cacheKey,
@@ -106,7 +110,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           const { data, error } = await userSupabase
             .from('profiles')
             .select('*')
-            .eq('id', finalUserId)
+            .eq('id', targetUserId)
             .single()
 
           if (error) {
