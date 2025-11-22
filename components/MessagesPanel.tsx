@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, PanInfo } from 'framer-motion'
 import { ArrowLeft, Send, Image as ImageIcon, Smile, X, Users, Plus } from 'lucide-react'
-import { useSession } from '@clerk/nextjs'
+import { useSession, useUser, SignInButton } from '@clerk/nextjs'
 import { User } from 'lucide-react'
 import { useSupabase } from '@/lib/supabase-client'
 import CreateGroupChatModal from './CreateGroupChatModal'
@@ -59,13 +59,19 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const { session: clerkSession } = useSession()
+  const { user, isLoaded: isUserLoaded } = useUser()
   const { supabase } = useSupabase()
   const channelRef = useRef<any>(null)
   const conversationsRef = useRef<Conversation[]>([])
 
   // Local cache helpers for messages (last 50 messages)
   const getMessagesCacheKey = (conversationId?: string, friendId?: string) => {
-    return getCacheKey('messages', conversationId || friendId || 'unknown')
+    if (conversationId) {
+      return getCacheKey('messages', 'conv', conversationId)
+    } else if (friendId) {
+      return getCacheKey('messages', 'friend', friendId)
+    }
+    return getCacheKey('messages', 'unknown')
   }
   
   const getCachedMessages = (conversationId?: string, friendId?: string): { messages: Message[], readReceipts: Record<string, string> } => {
@@ -349,8 +355,12 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
         // Replace optimistic message with real one
         setMessages(prev => prev.map(m => m.id === tempId ? newMessage : m))
         // Invalidate cache for this conversation
-        invalidateCache(getCacheKey('messages', selectedConversation?.conversationId || selectedFriend || 'unknown'))
-        invalidateCache(getCacheKey('conversations', currentUserId))
+        if (selectedConversation?.conversationId) {
+          invalidateCache(getCacheKey('messages', 'conv', selectedConversation.conversationId) + '*')
+        } else if (selectedFriend) {
+          invalidateCache(getCacheKey('messages', 'friend', selectedFriend) + '*')
+        }
+        invalidateCache(getCacheKey('conversations', currentUserId) + '*')
         // Update conversation list optimistically without full reload
         if (selectedConversation?.conversationId) {
           updateConversationInList(selectedConversation.conversationId, {
@@ -562,10 +572,9 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
 
   // Handle conversation/friend selection
   const handleSelectConversation = (conversation: Conversation) => {
+    setMessages([]) // Clear messages immediately when switching to prevent cross-contamination
     setSelectedFriend(null)
     setSelectedConversation(conversation)
-    // Don't clear messages immediately - let cache handle instant display
-    // Messages will be filtered/cleared by fetchMessages if needed
     if (conversation.conversationId) {
       fetchMessages(conversation.conversationId)
     } else if (conversation.userId) {
@@ -576,10 +585,9 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
   }
 
   const handleSelectFriend = (friendId: string) => {
+    setMessages([]) // Clear messages immediately when switching to prevent cross-contamination
     setSelectedConversation(null)
     setSelectedFriend(friendId)
-    // Don't clear messages immediately - let cache handle instant display
-    // Messages will be filtered/cleared by fetchMessages if needed
     fetchMessages(undefined, friendId)
   }
 
@@ -854,14 +862,41 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
             <div className="w-6 h-6 border-2 border-gray-200 border-t-gray-900 rounded-full animate-spin"></div>
           </div>
         ) : allConversations.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-400">
-            <p className="text-sm">No conversations yet</p>
-            <button
-              onClick={() => setShowCreateGroup(true)}
-              className="mt-2 text-sm text-gray-600 hover:text-gray-900 underline"
-            >
-              Create a group chat
-            </button>
+          <div className="flex flex-col items-center justify-center h-full px-6 text-center">
+            {isUserLoaded && !user ? (
+              // Not logged in - show sign up button
+              <div className="flex flex-col items-center gap-4">
+                <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center">
+                  <Users className="w-8 h-8 text-gray-400" />
+                </div>
+                <div>
+                  <p className="text-gray-900 font-medium text-base mb-1">Start messaging</p>
+                  <p className="text-gray-500 text-sm mb-4">Sign in to start conversations with friends</p>
+                </div>
+                <SignInButton mode="modal">
+                  <button className="px-6 py-2.5 bg-[#9146FF] hover:bg-[#772CE8] text-white rounded-lg font-medium transition-colors">
+                    Sign In
+                  </button>
+                </SignInButton>
+              </div>
+            ) : (
+              // Logged in but no conversations - show make friends message
+              <div className="flex flex-col items-center gap-4">
+                <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center">
+                  <Users className="w-8 h-8 text-gray-400" />
+                </div>
+                <div>
+                  <p className="text-gray-900 font-medium text-base mb-1">No conversations yet</p>
+                  <p className="text-gray-500 text-sm mb-4">Add friends to start messaging</p>
+                </div>
+                <button
+                  onClick={() => setShowCreateGroup(true)}
+                  className="px-6 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-lg font-medium transition-colors"
+                >
+                  Create a group chat
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="divide-y divide-gray-100">
