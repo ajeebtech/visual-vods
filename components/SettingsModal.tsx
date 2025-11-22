@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Settings, User, Bell, Shield, Upload } from "lucide-react"
+import { User, Upload } from "lucide-react"
 import { useSession } from "@clerk/nextjs"
 import { useSupabase } from "@/lib/supabase-client"
 import { motion, AnimatePresence } from "framer-motion"
@@ -24,24 +24,9 @@ interface SettingsModalProps {
 
 const sidebarNavItems = [
   {
-    title: "General",
-    icon: Settings,
-    value: "general",
-  },
-  {
     title: "Profile",
     icon: User,
     value: "profile",
-  },
-  {
-    title: "Notifications",
-    icon: Bell,
-    value: "notifications",
-  },
-  {
-    title: "Security",
-    icon: Shield,
-    value: "security",
   },
 ]
 
@@ -105,27 +90,13 @@ export function SettingsModal({ open, onOpenChange, trigger, username, avatarUrl
                 {sidebarNavItems.find(item => item.value === activeTab)?.title || "Settings"}
               </h2>
               <p className="text-sm text-gray-500 mt-1">
-                {activeTab === "profile" && "Manage your profile settings and preferences"}
-                {activeTab === "general" && "Manage your general account settings"}
-                {activeTab === "notifications" && "Manage your notification preferences"}
-                {activeTab === "security" && "Manage your account security settings"}
+                Manage your profile settings and preferences
               </p>
             </motion.div>
 
             <div className="flex-1 overflow-y-auto">
               <div className="p-6 max-w-3xl">
                 <AnimatePresence mode="wait">
-                  {activeTab === "general" && (
-                    <motion.div
-                      key="general"
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <GeneralSettings />
-                    </motion.div>
-                  )}
                   {activeTab === "profile" && (
                     <motion.div
                       key="profile"
@@ -137,28 +108,6 @@ export function SettingsModal({ open, onOpenChange, trigger, username, avatarUrl
                       <ProfileSettings username={username} avatarUrl={avatarUrl} onUpdate={onUpdate} />
                     </motion.div>
                   )}
-                  {activeTab === "notifications" && (
-                    <motion.div
-                      key="notifications"
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <NotificationSettings />
-                    </motion.div>
-                  )}
-                  {activeTab === "security" && (
-                    <motion.div
-                      key="security"
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <SecuritySettings />
-                    </motion.div>
-                  )}
                 </AnimatePresence>
               </div>
             </div>
@@ -166,16 +115,6 @@ export function SettingsModal({ open, onOpenChange, trigger, username, avatarUrl
         </div>
       </DialogContent>
     </Dialog>
-  )
-}
-
-function GeneralSettings() {
-  return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-xl p-4 border border-gray-200">
-        <p className="text-gray-500 text-sm">General settings coming soon...</p>
-      </div>
-    </div>
   )
 }
 
@@ -438,22 +377,3 @@ function ProfileSettings({ username, avatarUrl, onUpdate }: { username?: string;
   )
 }
 
-function NotificationSettings() {
-  return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-xl p-6 border border-gray-200">
-        <p className="text-gray-500 text-sm">Notification settings coming soon...</p>
-      </div>
-    </div>
-  )
-}
-
-function SecuritySettings() {
-  return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-xl p-6 border border-gray-200">
-        <p className="text-gray-500 text-sm">Security settings coming soon...</p>
-      </div>
-    </div>
-  )
-}
