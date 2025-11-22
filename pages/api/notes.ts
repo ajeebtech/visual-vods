@@ -127,15 +127,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(400).json({ error: 'session_id is required' })
       }
 
-      // Verify session belongs to user (RLS will handle this)
+      // Get session and verify access (user owns it OR is friends with owner)
       const { data: session, error: sessionError } = await userSupabase
         .from('sessions')
-        .select('id')
+        .select('id, user_id')
         .eq('id', session_id as string)
         .single()
 
       if (sessionError || !session) {
         return res.status(404).json({ error: 'Session not found' })
+      }
+
+      // If user doesn't own the session, check if they're friends
+      if (session.user_id !== finalUserId) {
+        const { data: friendships, error: friendError } = await userSupabase
+          .from('friends')
+          .select('*')
+          .or(`and(requester_id.eq.${finalUserId},addressee_id.eq.${session.user_id}),and(requester_id.eq.${session.user_id},addressee_id.eq.${finalUserId})`)
+          .eq('status', 'accepted')
+
+        if (friendError || !friendships || friendships.length === 0) {
+          return res.status(403).json({ error: 'Access denied - you must be friends with the session owner' })
+        }
       }
 
       // Fetch notes

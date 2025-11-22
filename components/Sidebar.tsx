@@ -17,13 +17,15 @@ import {
     UserCheck,
     UserX,
     Users,
-    Plus
+    Plus,
+    Share2
 } from 'lucide-react'
 import { SettingsModal } from './SettingsModal'
 import AuthButton from './AuthButton'
 import MessagesPanel from './MessagesPanel'
 import CreateProjectModal from './CreateProjectModal'
 import EditProjectModal from './EditProjectModal'
+import ShareSessionModal from './ShareSessionModal'
 import { useSupabase } from '@/lib/supabase-client'
 import { useUser, useSession } from '@clerk/nextjs'
 import { getCached, setCached, getCacheKey, invalidateCache, fetchCached } from '@/lib/local-cache'
@@ -137,6 +139,12 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
     const [showProjects, setShowProjects] = useState(false)
     const [selectedProject, setSelectedProject] = useState<{ id: string, name: string, description: string | null, created_at: string, session_ids?: string[] } | null>(null)
     const [showEditProject, setShowEditProject] = useState(false)
+    const [projectSearchQuery, setProjectSearchQuery] = useState('')
+    const [filteredProjects, setFilteredProjects] = useState<Array<{ id: string, name: string, description: string | null, created_at: string }>>([])
+    const [filteredSessionsForSearch, setFilteredSessionsForSearch] = useState<Session[]>([])
+    const [sessionToShare, setSessionToShare] = useState<Session | null>(null)
+    const [showShareModal, setShowShareModal] = useState(false)
+    const [shareModalSession, setShareModalSession] = useState<Session | null>(null)
 
     // Debug: Log when avatarUrl changes
     useEffect(() => {
@@ -145,12 +153,17 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
     }, [avatarUrl])
 
     const { supabase } = useSupabase()
-    const { user: clerkUser } = useUser()
+    const { user: clerkUser, isLoaded: isUserLoaded } = useUser()
     const { session: clerkSession } = useSession()
 
     // Fetch user profile data
     const fetchUserProfile = async () => {
-        if (!clerkUser) return
+        if (!clerkUser) {
+            // Set guest profile for non-logged in users
+            setUsername('Guest')
+            setAvatarUrl(null)
+            return
+        }
 
         try {
             console.log('📥 Fetching user profile...')
@@ -297,11 +310,12 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
     useEffect(() => {
         if (clerkUser && clerkSession) {
             fetchUserProfile()
-        } else {
-            setUsername('User Name')
+        } else if (isUserLoaded && !clerkUser) {
+            // User is not logged in, set guest profile
+            setUsername('Guest')
             setAvatarUrl(null)
         }
-    }, [clerkUser, clerkSession])
+    }, [clerkUser, clerkSession, isUserLoaded])
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -493,6 +507,39 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
             fetchProjects()
         }
     }, [isExpanded, showProjects, clerkUser, clerkSession])
+
+    // Filter projects and sessions based on search query
+    useEffect(() => {
+        if (projectSearchQuery.trim() === '') {
+            setFilteredProjects(projects)
+            setFilteredSessionsForSearch([])
+        } else {
+            const query = projectSearchQuery.toLowerCase().trim()
+            // Filter projects
+            const filtered = projects.filter(project => 
+                project.name.toLowerCase().includes(query) ||
+                (project.description && project.description.toLowerCase().includes(query))
+            )
+            setFilteredProjects(filtered)
+            
+            // Filter sessions
+            const filteredSessions = sessions.filter(session =>
+                (session.title || 'Untitled Session').toLowerCase().includes(query) ||
+                (session.team1_name && session.team1_name.toLowerCase().includes(query)) ||
+                (session.team2_name && session.team2_name.toLowerCase().includes(query)) ||
+                (session.tournament && session.tournament.toLowerCase().includes(query)) ||
+                (session.player_name && session.player_name.toLowerCase().includes(query))
+            )
+            setFilteredSessionsForSearch(filteredSessions)
+        }
+    }, [projectSearchQuery, projects, sessions])
+
+    // Handle share session - open modal with friends and group chats
+    const handleShareSession = async (session: Session, e: React.MouseEvent) => {
+        e.stopPropagation()
+        setShareModalSession(session)
+        setShowShareModal(true)
+    }
 
     const handleLoadSession = async (session: Session) => {
         // Don't load if we're editing
@@ -1039,13 +1086,22 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                                                                     </p>
                                                                 )}
                                                             </div>
-                                                            <button
-                                                                onClick={(e) => handleStartEdit(session, e)}
-                                                                className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600 transition-all"
-                                                                title="Edit session name"
-                                                            >
-                                                                <Edit2 className="w-3 h-3" />
-                                                            </button>
+                                                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                                                <button
+                                                                    onClick={(e) => handleShareSession(session, e)}
+                                                                    className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                                                    title="Share session"
+                                                                >
+                                                                    <Share2 className="w-3 h-3" />
+                                                                </button>
+                                                                <button
+                                                                    onClick={(e) => handleStartEdit(session, e)}
+                                                                    className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                                                                    title="Edit session name"
+                                                                >
+                                                                    <Edit2 className="w-3 h-3" />
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 )}
@@ -1350,31 +1406,90 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                                         Create New Project
                                     </button>
 
+                                    {/* Search for Projects and Sessions */}
+                                    <div className="space-y-2 mb-4">
+                                        <label className="text-xs font-medium text-gray-700">Search Projects & Sessions</label>
+                                        <div className="relative">
+                                            <input
+                                                type="text"
+                                                value={projectSearchQuery}
+                                                onChange={(e) => setProjectSearchQuery(e.target.value)}
+                                                placeholder="Search projects and sessions..."
+                                                className="w-full px-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            />
+                                            <Search className="absolute right-3 top-2.5 w-4 h-4 text-gray-400" />
+                                        </div>
+                                    </div>
+
                                     {/* Projects List */}
                                     {isLoadingProjects ? (
                                         <p className="text-xs text-gray-500">Loading projects...</p>
-                                    ) : projects.length === 0 ? (
-                                        <p className="text-xs text-gray-500">No projects yet</p>
                                     ) : (
-                                        <div className="space-y-1 max-h-64 overflow-y-auto">
-                                            {projects.map((project) => (
-                                                <button
-                                                    key={project.id}
-                                                    onClick={() => {
-                                                        setSelectedProject(project)
-                                                        setShowEditProject(true)
-                                                    }}
-                                                    className="w-full px-3 py-2 text-left text-sm bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200 group"
-                                                >
-                                                    <p className="font-medium text-gray-900 truncate">
-                                                        {project.name}
-                                                    </p>
-                                                    <p className="text-xs text-gray-500 mt-0.5">
-                                                        {new Date(project.created_at).toLocaleDateString()}
-                                                    </p>
-                                                </button>
-                                            ))}
-                                        </div>
+                                        <>
+                                            {/* Projects Results */}
+                                            {(projectSearchQuery.trim() === '' ? projects : filteredProjects).length > 0 && (
+                                                <div className="space-y-2 mb-4">
+                                                    <label className="text-xs font-medium text-gray-700">Projects</label>
+                                                    <div className="space-y-1 max-h-48 overflow-y-auto">
+                                                        {(projectSearchQuery.trim() === '' ? projects : filteredProjects).map((project) => (
+                                                            <button
+                                                                key={project.id}
+                                                                onClick={() => {
+                                                                    setSelectedProject(project)
+                                                                    setShowEditProject(true)
+                                                                }}
+                                                                className="w-full px-3 py-2 text-left text-sm bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200 group"
+                                                            >
+                                                                <p className="font-medium text-gray-900 truncate">
+                                                                    {project.name}
+                                                                </p>
+                                                                <p className="text-xs text-gray-500 mt-0.5">
+                                                                    {new Date(project.created_at).toLocaleDateString()}
+                                                                </p>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Sessions Results */}
+                                            {projectSearchQuery.trim() !== '' && filteredSessionsForSearch.length > 0 && (
+                                                <div className="space-y-2">
+                                                    <label className="text-xs font-medium text-gray-700">Sessions</label>
+                                                    <div className="space-y-1 max-h-48 overflow-y-auto">
+                                                        {filteredSessionsForSearch.map((session) => (
+                                                            <button
+                                                                key={session.id}
+                                                                onClick={() => handleLoadSession(session)}
+                                                                className="w-full px-3 py-2 text-left text-sm bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200 group"
+                                                            >
+                                                                <p className="font-medium text-gray-900 truncate">
+                                                                    {session.title || 'Untitled Session'}
+                                                                </p>
+                                                                <p className="text-xs text-gray-500 mt-0.5">
+                                                                    {formatDate(session.created_at)}
+                                                                </p>
+                                                                {session.matches_data && Array.isArray(session.matches_data) && (
+                                                                    <p className="text-xs text-gray-400 mt-0.5">
+                                                                        {session.matches_data.length} matches
+                                                                    </p>
+                                                                )}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* No Results */}
+                                            {projectSearchQuery.trim() !== '' && filteredProjects.length === 0 && filteredSessionsForSearch.length === 0 && (
+                                                <p className="text-xs text-gray-500">No projects or sessions found</p>
+                                            )}
+
+                                            {/* Empty State (only show when no search query) */}
+                                            {projectSearchQuery.trim() === '' && projects.length === 0 && (
+                                                <p className="text-xs text-gray-500">No projects yet</p>
+                                            )}
+                                        </>
                                     )}
                                 </motion.div>
                             )}
@@ -1450,9 +1565,17 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                             content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
                         }}
                     >
-                        <button className="flex items-center gap-4">
+                        <button 
+                            className="flex items-center gap-4"
+                            onClick={() => {
+                                if (clerkUser) {
+                                    setIsSettingsOpen(true)
+                                }
+                            }}
+                            disabled={!clerkUser}
+                        >
                             <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 flex-shrink-0 border-2 border-gray-300 relative">
-                                {avatarUrl ? (
+                                {avatarUrl && clerkUser ? (
                                     <img
                                         key={`avatar-${avatarUrl}-${avatarKey}`}
                                         src={`${avatarUrl}${avatarUrl.includes('?') ? '&' : '?'}_t=${avatarKey}`}
@@ -1490,7 +1613,9 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                                         className="text-left"
                                     >
                                         <div className="text-sm font-medium text-black">{username}</div>
-                                        <div className="text-xs text-gray-500">View Profile</div>
+                                        <div className="text-xs text-gray-500">
+                                            {clerkUser ? 'View Profile' : 'Sign in to view profile'}
+                                        </div>
                                     </motion.div>
                                 )}
                             </AnimatePresence>
@@ -1535,7 +1660,11 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                 {showMessages && (
                     <MessagesPanel
                         friends={friendsList}
-                        onClose={() => setShowMessages(false)}
+                        onClose={() => {
+                            setShowMessages(false)
+                            setSessionToShare(null)
+                        }}
+                        sessionToShare={sessionToShare}
                     />
                 )}
             </AnimatePresence>
@@ -1570,6 +1699,17 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                     fetchProjects()
                     console.log('Project updated successfully')
                 }}
+            />
+
+            {/* Share Session Modal */}
+            <ShareSessionModal
+                isOpen={showShareModal}
+                onClose={() => {
+                    setShowShareModal(false)
+                    setShareModalSession(null)
+                }}
+                session={shareModalSession}
+                friends={friendsList}
             />
         </>
     )

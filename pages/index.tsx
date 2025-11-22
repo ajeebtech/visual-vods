@@ -1,10 +1,12 @@
 import { Suspense, useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import Head from 'next/head'
+import { useRouter } from 'next/router'
 import { motion, AnimatePresence } from 'framer-motion'
 import AILoadingState from '@/components/kokonutui/ai-loading'
 import SearchableSelect from '@/components/SearchableSelect'
 import { getCached, setCached, getCacheKey } from '@/lib/local-cache'
+import { useUser, useSession } from '@clerk/nextjs'
 
 // Dynamically import Scene to avoid SSR issues with Three.js
 const Scene = dynamic(() => import('../components/Scene'), {
@@ -35,6 +37,49 @@ export default function Home() {
 
   // Store the loaded session ID
   const [loadedSessionId, setLoadedSessionId] = useState<string | null>(null)
+  
+  const router = useRouter()
+  const { user } = useUser()
+  const { session: clerkSession } = useSession()
+
+  // Load session from URL query parameter
+  useEffect(() => {
+    const loadSessionFromUrl = async () => {
+      const { sessionId } = router.query
+      if (sessionId && typeof sessionId === 'string' && user && clerkSession && !loadedSessionId) {
+        try {
+          const token = await clerkSession.getToken({ template: 'supabase' })
+          if (!token) return
+
+          const response = await fetch(`/api/sessions?id=${sessionId}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          })
+
+          if (response.ok) {
+            const data = await response.json()
+            if (data.session) {
+              await handleLoadSession(data.session)
+              // Remove sessionId from URL after loading
+              router.replace('/', undefined, { shallow: true })
+            } else {
+              alert('Session not found or you do not have access to it')
+            }
+          } else {
+            const errorData = await response.json().catch(() => ({ error: 'Failed to load session' }))
+            alert(errorData.error || 'Failed to load session')
+          }
+        } catch (error) {
+          console.error('Error loading session from URL:', error)
+        }
+      }
+    }
+
+    if (router.isReady) {
+      loadSessionFromUrl()
+    }
+  }, [router.query.sessionId, router.isReady, user, clerkSession, loadedSessionId])
 
   // Handle loading a session from history
   const handleLoadSession = async (session: any) => {

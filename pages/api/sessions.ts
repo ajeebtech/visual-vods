@@ -124,36 +124,75 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const { getCached, getCacheKey } = await import('../../lib/redis')
 
       if (id) {
-        // Get a specific session
-        const cacheKey = getCacheKey('session', id as string)
+        // Get a specific session - allow access if user owns it OR is friends with the owner
+        const cacheKey = getCacheKey('session', id as string, finalUserId)
         
         const session = await getCached(
           cacheKey,
           async () => {
-            const { data, error } = await userSupabase
+            // First, try to get the session
+            const { data: sessionData, error: sessionError } = await userSupabase
               .from('sessions')
               .select('*')
               .eq('id', id as string)
               .single()
 
-            if (error) {
-              throw error
-            }
-
-            if (!data) {
+            if (sessionError) {
+              console.error('Error fetching session:', sessionError)
               return null
             }
 
-            return data
+            if (!sessionData) {
+              console.log('Session not found:', id)
+              return null
+            }
+
+            console.log('Session found:', { id: sessionData.id, owner: sessionData.user_id, requester: finalUserId })
+
+            // If user owns the session, return it
+            if (sessionData.user_id === finalUserId) {
+              console.log('User owns the session')
+              return { session: sessionData, isOwner: true }
+            }
+
+            // Check if users are friends - friendship can be in either direction
+            // Use 'friends' table with requester_id and addressee_id columns
+            console.log('Checking friendship between:', finalUserId, 'and', sessionData.user_id)
+            const { data: friendships, error: friendError } = await userSupabase
+              .from('friends')
+              .select('*')
+              .or(`and(requester_id.eq.${finalUserId},addressee_id.eq.${sessionData.user_id}),and(requester_id.eq.${sessionData.user_id},addressee_id.eq.${finalUserId})`)
+              .eq('status', 'accepted')
+
+            if (friendError) {
+              console.error('Error checking friendship:', friendError)
+            }
+
+            console.log('Friendship check result:', { 
+              found: friendships?.length || 0, 
+              friendships: friendships,
+              error: friendError 
+            })
+
+            // If they're friends, allow access
+            if (friendships && friendships.length > 0 && !friendError) {
+              console.log('Users are friends, allowing access')
+              return { session: sessionData, isOwner: false }
+            }
+
+            // Not owner and not friends - deny access
+            console.log('Access denied: user is not owner and not friends with owner')
+            return null
           },
-          60 // 1 minute TTL
+          60 // 1 minute TTL - only caches successful access
         )
 
         if (!session) {
-          return res.status(404).json({ error: 'Session not found' })
+          console.log('Session access denied for user:', finalUserId, 'session:', id)
+          return res.status(404).json({ error: 'Session not found or access denied' })
         }
 
-        return res.status(200).json(session)
+        return res.status(200).json({ session: session.session, isOwner: session.isOwner })
       } else {
         // Get sessions for the user with pagination
         const limit = parseInt(req.query.limit as string) || 5

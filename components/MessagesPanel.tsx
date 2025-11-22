@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, PanInfo } from 'framer-motion'
-import { ArrowLeft, Send, Image as ImageIcon, Smile, X, Users, Plus } from 'lucide-react'
+import { ArrowLeft, Send, Image as ImageIcon, Smile, X, Users, Plus, ExternalLink } from 'lucide-react'
 import { useSession, useUser, SignInButton } from '@clerk/nextjs'
 import { User } from 'lucide-react'
 import { useSupabase } from '@/lib/supabase-client'
+import { useRouter } from 'next/router'
 import CreateGroupChatModal from './CreateGroupChatModal'
 import { getCached, setCached, getCacheKey, invalidateCache } from '@/lib/local-cache'
 
@@ -44,9 +45,10 @@ interface MessagesPanelProps {
     friend: { id: string, username: string, avatar_url: string | null }
   }>
   onClose: () => void
+  sessionToShare?: { id: string, title: string } | null
 }
 
-export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) {
+export default function MessagesPanel({ friends, onClose, sessionToShare }: MessagesPanelProps) {
   const [selectedFriend, setSelectedFriend] = useState<string | null>(null)
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -61,8 +63,30 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
   const { session: clerkSession } = useSession()
   const { user, isLoaded: isUserLoaded } = useUser()
   const { supabase } = useSupabase()
+  const router = useRouter()
   const channelRef = useRef<any>(null)
   const conversationsRef = useRef<Conversation[]>([])
+
+  // Parse session links from message content
+  const parseSessionLink = (content: string): { sessionId: string | null, restOfContent: string } => {
+    // Match URLs with sessionId parameter
+    const sessionIdMatch = content.match(/[?&]sessionId=([a-zA-Z0-9-]+)/)
+    if (sessionIdMatch) {
+      return {
+        sessionId: sessionIdMatch[1],
+        restOfContent: content.replace(/https?:\/\/[^\s]+/g, '').trim() // Remove the full URL
+      }
+    }
+    return { sessionId: null, restOfContent: content }
+  }
+
+  // Handle clicking on session link
+  const handleSessionLinkClick = (sessionId: string) => {
+    // Navigate to the session in the same tab
+    router.push(`/?sessionId=${sessionId}`)
+    // Close the messages panel
+    onClose()
+  }
 
   // Local cache helpers for messages (last 50 messages)
   const getMessagesCacheKey = (conversationId?: string, friendId?: string) => {
@@ -762,7 +786,38 @@ export default function MessagesPanel({ friends, onClose }: MessagesPanelProps) 
                         : 'bg-white text-gray-900 border border-gray-100 shadow-sm'
                         }`}
                     >
-                      <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">{message.content}</p>
+                      {(() => {
+                        const { sessionId, restOfContent } = parseSessionLink(message.content)
+                        return (
+                          <>
+                            {restOfContent && (
+                              <p className="text-sm whitespace-pre-wrap break-words leading-relaxed mb-2">
+                                {restOfContent}
+                              </p>
+                            )}
+                            {sessionId && (
+                              <motion.button
+                                onClick={() => handleSessionLinkClick(sessionId)}
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
+                                  isSent
+                                    ? 'bg-white/10 hover:bg-white/20 text-white'
+                                    : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700'
+                                }`}
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                                <span className="text-sm font-medium">Open Session</span>
+                              </motion.button>
+                            )}
+                            {!sessionId && (
+                              <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">
+                                {message.content}
+                              </p>
+                            )}
+                          </>
+                        )
+                      })()}
                       <div className={`flex items-center gap-1.5 mt-1.5 ${isSent ? 'justify-end' : 'justify-start'}`}>
                         <p className={`text-xs ${isSent ? 'text-gray-400' : 'text-gray-400'}`}>
                           {new Date(message.created_at).toLocaleTimeString([], {
