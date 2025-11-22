@@ -28,6 +28,7 @@ export default function Home() {
   // Store team IDs for fetching matches
   const [team1Id, setTeam1Id] = useState<string | null>(null)
   const [team2Id, setTeam2Id] = useState<string | null>(null)
+  const [playerId, setPlayerId] = useState<string | null>(null)
   
   // Store matches data
   const [matchesData, setMatchesData] = useState<any>(null)
@@ -76,21 +77,22 @@ export default function Home() {
     }
   }
 
-  // Clear player name when team1 or team2 is set
   const handleTeam1Change = (value: string, teamId?: string) => {
     setTeam1(value)
     setTeam1Id(teamId || null)
-    if (value) {
-      setPlayerName('') // Clear player name when team is selected
-    }
+    // Don't clear player - allow filtering player matches by teams
   }
 
   const handleTeam2Change = (value: string, teamId?: string) => {
     setTeam2(value)
     setTeam2Id(teamId || null)
-    if (value) {
-      setPlayerName('') // Clear player name when team is selected
-    }
+    // Don't clear player - allow filtering player matches by teams
+  }
+
+  const handlePlayerNameChange = (value: string, id?: string) => {
+    setPlayerName(value)
+    setPlayerId(id || null)
+    // Don't clear teams - allow filtering player matches by teams
   }
 
   // Helper function to fetch from VLR.gg autocomplete API via our proxy
@@ -124,6 +126,12 @@ export default function Home() {
   // Extract team ID from search result path (e.g., /search/r/team/2593/ac -> 2593)
   const extractTeamId = (path: string): string | null => {
     const match = path.match(/\/search\/r\/team\/(\d+)\//)
+    return match ? match[1] : null
+  }
+
+  // Extract player ID from search result path (e.g., /search/r/player/881/yay -> 881)
+  const extractPlayerId = (path: string): string | null => {
+    const match = path.match(/\/search\/r\/player\/(\d+)\//)
     return match ? match[1] : null
   }
 
@@ -210,7 +218,7 @@ export default function Home() {
     return Array.from(new Set(tournaments))
   }
 
-  const searchPlayerName = async (query: string): Promise<string[]> => {
+  const searchPlayerName = async (query: string): Promise<Array<{ name: string; id: string }>> => {
     const results = await fetchVLRResults(query)
     if (!results.length) return []
     
@@ -219,19 +227,24 @@ export default function Home() {
     if (playersIndex === -1) return []
     
     // Get all items after the players header until the next category or end
-    const players: string[] = []
+    const players: Array<{ name: string; id: string }> = []
+    const seenNames = new Set<string>()
+    
     for (let i = playersIndex + 1; i < results.length; i++) {
       const item = results[i]
       // Stop if we hit another category header
       if (item.id === '#') break
       // Add player names (items with id starting with /search/r/player/)
       if (item.id && item.id.startsWith('/search/r/player/') && item.value) {
-        players.push(item.value)
+        const playerId = extractPlayerId(item.id)
+        if (playerId && !seenNames.has(item.value)) {
+          players.push({ name: item.value, id: playerId })
+          seenNames.add(item.value)
+        }
       }
     }
     
-    // Remove duplicates
-    return Array.from(new Set(players))
+    return players
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -241,8 +254,63 @@ export default function Home() {
       setHasSubmitted(true)
       setIsLoading(true)
       
-      // If team1 is selected, fetch team matches
-      if (team1 && team1Id) {
+      // If player is selected, fetch player matches
+      if (playerName && playerId) {
+        try {
+          // Build query parameters
+          let queryParams = `playerId=${playerId}&playerName=${encodeURIComponent(playerName)}`
+          
+          // If both teams are selected, filter player matches by those teams
+          if (team1 && team2) {
+            queryParams += `&team1Name=${encodeURIComponent(team1)}&team2Name=${encodeURIComponent(team2)}`
+          }
+          
+          // Build cache key
+          const cacheKey = team1 && team2
+            ? getCacheKey('vlr:player-matches', playerId, playerName.toLowerCase(), team1.toLowerCase(), team2.toLowerCase())
+            : getCacheKey('vlr:player-matches', playerId, playerName.toLowerCase())
+          
+          // Try cache first
+          const cached = getCached<any>(cacheKey)
+          if (cached) {
+            console.log('Player matches data from cache:', cached)
+            setMatchesData(cached)
+            console.log(`Found ${cached.totalMatches} total matches`)
+            console.log(`Fetched ${cached.fetchedMatches} matches`)
+            console.log(`${cached.matchesWithVODs} matches have VOD links`)
+            if (cached.latestMatch && cached.latestMatch.vodLinks) {
+              console.log('Latest match VODs:', cached.latestMatch.vodLinks)
+            }
+            setIsLoading(false)
+            return
+          }
+          
+          // Add timestamp to bypass cache for debugging (remove this later)
+          const response = await fetch(`/api/vlr-player-matches?${queryParams}&_t=${Date.now()}`)
+          if (response.ok) {
+            const data = await response.json()
+            // Cache the result
+            setCached(cacheKey, data, 3600) // 1 hour
+            console.log('Player matches data:', data)
+            setMatchesData(data)
+            
+            // Log summary
+            console.log(`Found ${data.totalMatches} total matches`)
+            console.log(`Fetched ${data.fetchedMatches} matches`)
+            console.log(`${data.matchesWithVODs} matches have VOD links`)
+            if (data.latestMatch && data.latestMatch.vodLinks) {
+              console.log('Latest match VODs:', data.latestMatch.vodLinks)
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching player matches:', error)
+        } finally {
+          setIsLoading(false)
+        }
+      }
+      
+      // If team1 is selected (and no player), fetch team matches
+      if (team1 && team1Id && !playerName) {
         try {
           // Build query parameters
           let queryParams = `teamId=${team1Id}&teamName=${encodeURIComponent(team1)}`
@@ -412,14 +480,14 @@ export default function Home() {
                   onChange={setTournament}
                   onSearch={searchTournaments}
                   className="flex-1 min-w-[150px]"
+                  disabled={true}
                 />
                 <SearchableSelect
                   placeholder="Player Name"
                   value={playerName}
-                  onChange={setPlayerName}
+                  onChange={handlePlayerNameChange}
                   onSearch={searchPlayerName}
                   className="flex-1 min-w-[150px]"
-                  disabled={!!team1 || !!team2}
                 />
               </div>
 
