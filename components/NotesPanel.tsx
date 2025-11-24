@@ -3,9 +3,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useUser, useSession } from '@clerk/nextjs'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, MessageSquare } from 'lucide-react'
+import { Send, MessageSquare, Pencil } from 'lucide-react'
 import { getCached, setCached, getCacheKey, invalidateCache } from '@/lib/local-cache'
 import { Button } from '@heroui/button'
+import TacticalMapModal from './TacticalMapModal'
 
 interface Note {
   id: string
@@ -28,18 +29,19 @@ interface NotesPanelProps {
   youtubeIframeRef?: React.RefObject<HTMLIFrameElement>
 }
 
-export default function NotesPanel({ 
-  sessionId, 
-  matchHref, 
-  vodUrl, 
+export default function NotesPanel({
+  sessionId,
+  matchHref,
+  vodUrl,
   onTimestampClick,
-  youtubeIframeRef 
+  youtubeIframeRef
 }: NotesPanelProps) {
   const [notes, setNotes] = useState<Note[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [newNoteText, setNewNoteText] = useState('')
   const [currentTimestamp, setCurrentTimestamp] = useState<string>('no timestamp')
   const [currentTimeSeconds, setCurrentTimeSeconds] = useState(0)
+  const [isTacticalMapOpen, setIsTacticalMapOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const updateTimestampRef = useRef<(() => void) | null>(null)
 
@@ -51,7 +53,7 @@ export default function NotesPanel({
     const hrs = Math.floor(seconds / 3600)
     const mins = Math.floor((seconds % 3600) / 60)
     const secs = Math.floor(seconds % 60)
-    
+
     if (hrs > 0) {
       return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
     }
@@ -87,7 +89,7 @@ export default function NotesPanel({
 
         const handleResponse = (event: MessageEvent) => {
           if (!event.origin.includes('youtube.com')) return
-          
+
           try {
             let data: any
             if (typeof event.data === 'string') {
@@ -185,7 +187,7 @@ export default function NotesPanel({
     // Listen for YouTube messages to update time automatically
     const handleMessage = (event: MessageEvent) => {
       if (!event.origin.includes('youtube.com')) return
-      
+
       try {
         let data: any
         if (typeof event.data === 'string') {
@@ -227,7 +229,7 @@ export default function NotesPanel({
     if (!sessionId || !user || !clerkSession) return
 
     const cacheKey = getCacheKey('notes', sessionId, matchHref, vodUrl)
-    
+
     // Try cache first
     const cached = getCached<Note[]>(cacheKey)
     if (cached) {
@@ -238,7 +240,7 @@ export default function NotesPanel({
     setIsLoading(true)
     try {
       const token = await clerkSession.getToken({ template: 'supabase' })
-      
+
       if (!token) {
         setIsLoading(false)
         return
@@ -286,7 +288,7 @@ export default function NotesPanel({
 
     try {
       const token = await clerkSession.getToken({ template: 'supabase' })
-      
+
       if (!token) {
         alert('You must be logged in to add notes')
         return
@@ -315,26 +317,26 @@ export default function NotesPanel({
           username: newNote.username || user.username || user.firstName || 'You',
           avatar_url: newNote.avatar_url || user.imageUrl || null
         }
-        
+
         // Update local state with new note
         const updatedNotes = [...notes, noteWithProfile].sort((a, b) => a.timestamp_seconds - b.timestamp_seconds)
         setNotes(updatedNotes)
         setNewNoteText('')
-        
+
         // Update cache with the new note list instead of invalidating
         const cacheKey = getCacheKey('notes', sessionId, matchHref, vodUrl)
         setCached(cacheKey, updatedNotes, 60) // 1 minute TTL
-        
+
         // Invalidate matches-with-notes cache so border appears
         invalidateCache(getCacheKey('matches-with-notes', sessionId) + '*')
-        
+
         // Dispatch event to trigger refresh of matches-with-notes in other components
         if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('notes-updated', { 
-            detail: { sessionId, matchHref } 
+          window.dispatchEvent(new CustomEvent('notes-updated', {
+            detail: { sessionId, matchHref }
           }))
         }
-        
+
         // Scroll to bottom to show new message
         setTimeout(() => {
           messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -376,8 +378,21 @@ export default function NotesPanel({
     <div className="w-80 bg-black rounded-lg flex flex-col h-full max-h-[600px] border border-gray-800">
       {/* Header */}
       <div className="p-4 border-b border-gray-800">
-        <h3 className="text-lg font-semibold text-white">NOTES</h3>
-        <p className="text-xs text-gray-400 mt-1">{notes.length} msgs</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-white">NOTES</h3>
+            <p className="text-xs text-gray-400 mt-1">{notes.length} msgs</p>
+          </div>
+          <motion.button
+            onClick={() => setIsTacticalMapOpen(true)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-[#9146FF] hover:bg-[#772CE8] text-white rounded-lg text-sm font-medium transition-colors"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <Pencil className="w-4 h-4" />
+            Draw
+          </motion.button>
+        </div>
       </div>
 
       {/* Messages Area */}
@@ -408,7 +423,7 @@ export default function NotesPanel({
               >
                 {formatTimestamp(note.timestamp_seconds)}
               </button>
-              
+
               {/* Avatar and Username */}
               <div className="flex items-center gap-2 flex-shrink-0 min-w-[100px]">
                 {note.avatar_url ? (
@@ -432,7 +447,7 @@ export default function NotesPanel({
                   {note.username || 'Unknown'}
                 </span>
               </div>
-              
+
               {/* Message */}
               <p className="text-sm text-gray-200 group-hover:text-white flex-1 break-words transition-colors">
                 {note.note_text}
@@ -471,7 +486,7 @@ export default function NotesPanel({
             transition={{ type: "spring", stiffness: 400, damping: 17 }}
           >
             <Button
-            onClick={handleAddNote}
+              onClick={handleAddNote}
               isDisabled={!newNoteText.trim()}
               className="bg-[#9146FF] hover:bg-[#772CE8] text-white disabled:opacity-50 disabled:cursor-not-allowed rounded-lg"
               size="sm"
@@ -482,6 +497,15 @@ export default function NotesPanel({
           </motion.div>
         </div>
       </div>
+
+      {/* Tactical Map Modal */}
+      <TacticalMapModal
+        open={isTacticalMapOpen}
+        onOpenChange={setIsTacticalMapOpen}
+        sessionId={sessionId}
+        matchHref={matchHref}
+        vodUrl={vodUrl}
+      />
     </div>
   )
 }
