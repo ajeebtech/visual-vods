@@ -83,6 +83,7 @@ export default function TacticalMapModal({ open, onOpenChange, initialMap, sessi
     const [draggedAgent, setDraggedAgent] = useState<Agent | null>(null)
     const [draggedAbility, setDraggedAbility] = useState<{ ability: AgentAbility; agent: Agent } | null>(null)
     const [hoveredAgent, setHoveredAgent] = useState<PlacedAgent | null>(null)
+    const [hoveredToolbarAgent, setHoveredToolbarAgent] = useState<string | null>(null)
     const [draggingPlacedAgent, setDraggingPlacedAgent] = useState<string | null>(null)
     const [placedAbilities, setPlacedAbilities] = useState<PlacedAbility[]>([])
 
@@ -297,7 +298,7 @@ export default function TacticalMapModal({ open, onOpenChange, initialMap, sessi
 
     // Zoom and pan handlers
     const handleZoomIn = () => {
-        setZoom(prev => Math.min(prev + 0.25, 3))
+        setZoom(prev => Math.min(prev + 0.25, 5))
     }
 
     const handleZoomOut = () => {
@@ -313,7 +314,7 @@ export default function TacticalMapModal({ open, onOpenChange, initialMap, sessi
         if (e.ctrlKey || e.metaKey) {
             e.preventDefault()
             const delta = e.deltaY > 0 ? -0.1 : 0.1
-            setZoom(prev => Math.max(0.5, Math.min(3, prev + delta)))
+            setZoom(prev => Math.max(0.5, Math.min(5, prev + delta)))
         }
     }
 
@@ -549,7 +550,7 @@ export default function TacticalMapModal({ open, onOpenChange, initialMap, sessi
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-[95vw] w-[1400px] h-[90vh] gap-0 p-0 overflow-hidden bg-black border border-gray-800 rounded-xl [&>button]:hidden">
+            <DialogContent className="max-w-[95vw] w-[1400px] h-[90vh] gap-0 p-0 overflow-visible bg-black border border-gray-800 rounded-xl [&>button]:hidden">
                 <div className="flex flex-col h-full">
                     {/* Header */}
                     <div className="flex items-center justify-between p-4 border-b border-gray-800">
@@ -694,16 +695,19 @@ export default function TacticalMapModal({ open, onOpenChange, initialMap, sessi
                             )}
 
                             {/* Pen Tool */}
-                            <Button
-                                onClick={() => setDrawMode(drawMode === 'pen' ? null : 'pen')}
-                                className={`${drawMode === 'pen'
-                                    ? 'bg-[#9146FF] text-white'
-                                    : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                                    }`}
-                                size="sm"
-                            >
-                                <Pen className="w-4 h-4" />
-                            </Button>
+                            <div className="flex items-center gap-1">
+                                <Button
+                                    onClick={() => setDrawMode(drawMode === 'pen' ? null : 'pen')}
+                                    className={`${drawMode === 'pen'
+                                        ? 'bg-[#9146FF] text-white'
+                                        : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                                        }`}
+                                    size="sm"
+                                >
+                                    <Pen className="w-4 h-4" />
+                                </Button>
+                                <span className="text-xs text-gray-500 italic">In Development</span>
+                            </div>
 
                             {/* Eraser Tool */}
                             <Button
@@ -941,78 +945,59 @@ export default function TacticalMapModal({ open, onOpenChange, initialMap, sessi
                         </div>
 
                         {/* Agent Toolbar */}
-                        <div className="border-t border-gray-800 bg-black/90 p-3">
-                            <div className="flex items-center justify-center gap-3 overflow-x-auto">
+                        <div className="border-t border-gray-800 bg-black/90 p-4">
+                            <div className="flex items-center justify-center gap-2 overflow-x-auto">
                                 {VALORANT_AGENTS.map(agent => (
                                     <motion.div
                                         key={agent.id}
-                                        className="relative group"
-                                        whileHover={{ y: -4 }}
+                                        className="relative"
+                                        whileHover={{ y: -2 }}
+                                        onMouseEnter={() => setHoveredToolbarAgent(agent.id)}
+                                        onMouseLeave={() => setHoveredToolbarAgent(null)}
                                     >
                                         {/* Agent Avatar */}
                                         <div
                                             draggable
                                             onDragStart={() => handleDragStart(agent)}
-                                            className="w-16 h-16 rounded-lg overflow-hidden border-2 border-gray-700 hover:border-[#9146FF] transition-all cursor-grab active:cursor-grabbing shadow-lg relative"
+                                            className="w-14 h-14 rounded-lg overflow-hidden border-2 border-gray-700 hover:border-[#9146FF] transition-all cursor-grab active:cursor-grabbing shadow-lg relative"
                                         >
                                             <img
                                                 src={agent.icon}
                                                 alt={agent.name}
                                                 className="w-full h-full object-cover"
                                             />
-                                            {/* Agent Name Overlay */}
-                                            <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-1 py-0.5">
-                                                <p className="text-xs font-bold text-white text-center truncate">
-                                                    {agent.name}
-                                                </p>
-                                            </div>
                                         </div>
 
-                                        {/* Abilities Tooltip on Hover */}
-                                        <AnimatePresence>
-                                            <motion.div
-                                                initial={{ opacity: 0, y: 10 }}
-                                                whileHover={{ opacity: 1, y: 0 }}
-                                                className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50"
-                                            >
-                                                <div className="bg-black/95 border border-gray-700 rounded-lg p-3 shadow-2xl min-w-[200px]">
-                                                    {/* Agent Header */}
-                                                    <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-700">
-                                                        <img
-                                                            src={agent.icon}
-                                                            alt={agent.name}
-                                                            className="w-8 h-8 rounded"
-                                                        />
-                                                        <div>
-                                                            <p className="font-bold text-white text-sm">{agent.name}</p>
-                                                            <p className="text-xs text-gray-400">{agent.role}</p>
-                                                        </div>
-                                                    </div>
-
+                                        {/* Abilities Tooltip on Hover - ValoPlant Style */}
+                                        {hoveredToolbarAgent === agent.id && (
+                                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-[100]">
+                                                <div className="bg-red-500 border-2 border-[#9146FF] rounded-lg p-2 shadow-2xl backdrop-blur-sm">
                                                     {/* Abilities in a Row */}
-                                                    <div className="flex items-center justify-center gap-2">
+                                                    <div className="flex items-center gap-2">
                                                         {agent.abilities.map(ability => (
                                                             <div
                                                                 key={ability.slot}
-                                                                className="flex flex-col items-center group/ability"
+                                                                draggable
+                                                                onDragStart={(e) => {
+                                                                    e.stopPropagation()
+                                                                    handleAbilityDragStart(ability, agent)
+                                                                }}
+                                                                className="flex flex-col items-center cursor-grab active:cursor-grabbing"
                                                                 title={`${ability.name}: ${ability.description}`}
                                                             >
-                                                                <div className="w-10 h-10 rounded bg-gray-800 border border-gray-600 flex items-center justify-center overflow-hidden">
+                                                                <div className="w-12 h-12 rounded bg-gray-800 border-2 border-gray-600 hover:border-[#9146FF] flex items-center justify-center overflow-hidden transition-all">
                                                                     <img
                                                                         src={ability.icon}
                                                                         alt={ability.name}
-                                                                        className="w-full h-full object-cover"
+                                                                        className="w-full h-full object-cover pointer-events-none"
                                                                     />
                                                                 </div>
-                                                                <span className="text-xs font-mono text-[#9146FF] mt-1">
-                                                                    {ability.slot}
-                                                                </span>
                                                             </div>
                                                         ))}
                                                     </div>
                                                 </div>
-                                            </motion.div>
-                                        </AnimatePresence>
+                                            </div>
+                                        )}
                                     </motion.div>
                                 ))}
                             </div>

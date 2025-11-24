@@ -13,36 +13,36 @@ export default function AuthCallback() {
     const handleAuthCallback = async () => {
       try {
         setStatus('Processing authentication...')
-        
+
         // Check if we have hash fragments (OAuth callback)
         const hash = window.location.hash
         if (hash) {
           console.log('OAuth callback detected with hash fragments')
-          
+
           // Parse hash fragments manually if needed
           const hashParams = new URLSearchParams(hash.substring(1))
           const accessToken = hashParams.get('access_token')
           const errorParam = hashParams.get('error')
-          
+
           if (errorParam) {
             console.error('OAuth error in hash:', errorParam)
             setStatus('Authentication failed. Redirecting...')
             setTimeout(() => router.replace('/?error=auth_failed'), 2000)
             return
           }
-          
+
           if (accessToken) {
             // We have an access token, let Supabase handle it
             console.log('Access token found in hash, processing...')
           }
         }
-        
+
         // Wait a moment for Supabase to process the hash
         await new Promise(resolve => setTimeout(resolve, 300))
-        
+
         // Get the session - Supabase automatically handles the hash fragments
         const { data: { session }, error } = await supabase.auth.getSession()
-        
+
         if (error) {
           console.error('Error getting session:', error)
           setStatus('Authentication failed. Redirecting...')
@@ -62,7 +62,7 @@ export default function AuthCallback() {
           // Check URL for error
           const hashParams = new URLSearchParams(window.location.hash.substring(1))
           const errorParam = hashParams.get('error')
-          
+
           if (errorParam) {
             console.error('OAuth error:', errorParam)
             setStatus('Authentication failed. Redirecting...')
@@ -95,3 +95,9 @@ export default function AuthCallback() {
   )
 }
 
+// Make this a dynamic page to avoid static export issues
+export async function getServerSideProps() {
+  return {
+    props: {},
+  }
+}

@@ -65,7 +65,7 @@ interface MatchScene3DProps {
 // Helper to get YouTube thumbnail from video ID or URL
 const getYouTubeThumbnail = (url: string): string | null => {
   let videoId: string | null = null
-  
+
   if (url.includes('youtu.be/')) {
     const match = url.match(/youtu\.be\/([^?&]+)/)
     videoId = match ? match[1] : null
@@ -76,11 +76,11 @@ const getYouTubeThumbnail = (url: string): string | null => {
     const match = url.match(/embed\/([^?&]+)/)
     videoId = match ? match[1] : null
   }
-  
+
   if (videoId) {
     return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`
   }
-  
+
   return null
 }
 
@@ -90,28 +90,28 @@ function generateMatchPositions(count: number): Array<[number, number, number]> 
   const spread = 5 // Reduced spread - how far to spread on x and y axes
   const minDistance = 1.8 // Minimum distance between thumbnails to avoid overlap
   const usedPositions: Array<[number, number]> = []
-  
+
   for (let i = 0; i < count; i++) {
     let attempts = 0
     let x: number = 0
     let y: number = 0
     let validPosition = false
-    
+
     // Try to find a position that doesn't overlap
     while (!validPosition && attempts < 50) {
       // Scatter randomly on x and y, but closer together
       x = (Math.random() - 0.5) * spread * 2
       y = (Math.random() - 0.5) * spread * 2
-      
+
       // Check if this position is too close to existing positions
       validPosition = usedPositions.every(([usedX, usedY]) => {
         const distance = Math.sqrt((x - usedX) ** 2 + (y - usedY) ** 2)
         return distance >= minDistance
       })
-      
+
       attempts++
     }
-    
+
     // If we couldn't find a non-overlapping position, use a grid-based fallback
     if (!validPosition) {
       const cols = Math.ceil(Math.sqrt(count))
@@ -120,9 +120,9 @@ function generateMatchPositions(count: number): Array<[number, number, number]> 
       x = (col - (cols - 1) / 2) * minDistance
       y = (row - (count / cols - 1) / 2) * minDistance
     }
-    
+
     usedPositions.push([x, y])
-    
+
     // Calculate z-depth: latest 20 matches (first 20 after sorting newest-first) are closer to camera
     let z: number
     if (i < 20) {
@@ -134,10 +134,10 @@ function generateMatchPositions(count: number): Array<[number, number, number]> 
       const maxDepth = -3 - (age * 0.4) // Each older match goes further back
       z = -3 - Math.random() * Math.min(12, maxDepth + 3)
     }
-    
+
     positions.push([x, y, z])
   }
-  
+
   return positions
 }
 
@@ -151,6 +151,7 @@ function MatchTile({
   onThumbnailLoad,
   isVisible,
   hasNotes = false,
+  searchedTeamName,
 }: {
   position: [number, number, number]
   thumbnail: string | null
@@ -160,6 +161,7 @@ function MatchTile({
   onThumbnailLoad?: (index: number) => void
   isVisible: boolean
   hasNotes?: boolean
+  searchedTeamName?: string
 }) {
   const meshRef = useRef<THREE.Mesh>(null)
   const borderGroupRef = useRef<THREE.Group>(null)
@@ -170,12 +172,12 @@ function MatchTile({
   const animationStartTime = useRef<number | null>(null)
   const targetScaleRef = useRef(1.0)
   const currentScaleRef = useRef(1.0)
-  
+
   // Load texture
   useEffect(() => {
     let currentTexture: THREE.Texture | null = null
     let isMounted = true
-    
+
     if (thumbnail) {
       const loader = new THREE.TextureLoader()
       loader.load(
@@ -204,7 +206,7 @@ function MatchTile({
     } else {
       setTexture(null)
     }
-    
+
     return () => {
       isMounted = false
       if (currentTexture) {
@@ -212,7 +214,7 @@ function MatchTile({
       }
     }
   }, [thumbnail, match.matchId, index])
-  
+
   // Trigger fade-in animation when tile becomes visible
   useEffect(() => {
     if (isVisible) {
@@ -222,34 +224,34 @@ function MatchTile({
         setShouldAnimate(true)
         animationStartTime.current = null // Reset for new animation
       }, delay)
-      
+
       return () => clearTimeout(timer)
     } else {
       setShouldAnimate(false)
       opacityRef.current = 0
     }
   }, [isVisible, index])
-  
+
   // Update target scale when hover state changes
   useEffect(() => {
     targetScaleRef.current = hovered ? 1.2 : 1.0
   }, [hovered])
-  
+
   // Smooth fade-in animation and hover scale using useFrame
   useFrame((state, delta) => {
     if (shouldAnimate && meshRef.current) {
       if (animationStartTime.current === null) {
         animationStartTime.current = state.clock.elapsedTime
       }
-      
+
       const elapsed = state.clock.elapsedTime - animationStartTime.current
       const duration = 0.6 // 600ms in seconds
       const progress = Math.min(elapsed / duration, 1)
-      
+
       // Ease-out curve for smooth animation
       const eased = 1 - Math.pow(1 - progress, 3)
       opacityRef.current = eased
-      
+
       // Smoothly interpolate scale towards target (slow animation)
       const lerpSpeed = 0.08 // Slower = smoother animation (0.05-0.15 range)
       currentScaleRef.current = THREE.MathUtils.lerp(
@@ -257,28 +259,28 @@ function MatchTile({
         targetScaleRef.current,
         lerpSpeed
       )
-      
+
       // Update material opacity
       if (meshRef.current.material) {
         const material = meshRef.current.material as THREE.MeshStandardMaterial
         material.opacity = opacityRef.current
         material.needsUpdate = true
       }
-      
+
       // Apply scale with base fade-in scale
       const baseScale = opacityRef.current * 0.95 + 0.05 // Scale from 0.05 to 1.0 as it fades in
       meshRef.current.scale.setScalar(baseScale * currentScaleRef.current)
-      
+
       // Update border group scale to match thumbnail
       if (borderGroupRef.current) {
         borderGroupRef.current.scale.setScalar(currentScaleRef.current)
       }
     }
   })
-  
+
   // Purple gradient color
   const purpleColor = new THREE.Color(0x9333ea)
-  
+
   return (
     <group position={position}>
       {/* Thumbnail plane */}
@@ -292,8 +294,8 @@ function MatchTile({
       >
         <planeGeometry args={[2, 1.125]} />
         {texture ? (
-          <meshStandardMaterial 
-            map={texture} 
+          <meshStandardMaterial
+            map={texture}
             side={THREE.DoubleSide}
             transparent={true}
             opacity={opacityRef.current}
@@ -302,8 +304,8 @@ function MatchTile({
             toneMapped={true}
           />
         ) : (
-          <meshStandardMaterial 
-            color={purpleColor} 
+          <meshStandardMaterial
+            color={purpleColor}
             side={THREE.DoubleSide}
             transparent={true}
             opacity={opacityRef.current}
@@ -312,14 +314,14 @@ function MatchTile({
           />
         )}
       </mesh>
-      
+
       {/* Orange border if match has notes - using a frame made of 4 planes */}
       {hasNotes && (
         <group ref={borderGroupRef}>
           {/* Top border */}
           <mesh rotation={[0, 0, 0]} position={[0, 0.5625, 0.001]}>
             <planeGeometry args={[2.0, 0.05]} />
-            <meshStandardMaterial 
+            <meshStandardMaterial
               color={new THREE.Color(0xff6600)}
               side={THREE.DoubleSide}
               transparent={true}
@@ -331,7 +333,7 @@ function MatchTile({
           {/* Bottom border */}
           <mesh rotation={[0, 0, 0]} position={[0, -0.5625, 0.001]}>
             <planeGeometry args={[2.0, 0.05]} />
-            <meshStandardMaterial 
+            <meshStandardMaterial
               color={new THREE.Color(0xff6600)}
               side={THREE.DoubleSide}
               transparent={true}
@@ -343,7 +345,7 @@ function MatchTile({
           {/* Left border */}
           <mesh rotation={[0, 0, 0]} position={[-1.0, 0, 0.001]}>
             <planeGeometry args={[0.05, 1.125]} />
-            <meshStandardMaterial 
+            <meshStandardMaterial
               color={new THREE.Color(0xff6600)}
               side={THREE.DoubleSide}
               transparent={true}
@@ -355,7 +357,7 @@ function MatchTile({
           {/* Right border */}
           <mesh rotation={[0, 0, 0]} position={[1.0, 0, 0.001]}>
             <planeGeometry args={[0.05, 1.125]} />
-            <meshStandardMaterial 
+            <meshStandardMaterial
               color={new THREE.Color(0xff6600)}
               side={THREE.DoubleSide}
               transparent={true}
@@ -366,72 +368,86 @@ function MatchTile({
           </mesh>
         </group>
       )}
-      
+
       {/* Score and team info below thumbnail using HTML overlay */}
-      {match.matchInfo && (
-        <Html
-          position={[0, -0.7, 0]}
-          center
-          transform
-          style={{
-            pointerEvents: 'none',
-            userSelect: 'none',
-            transform: 'translate3d(-50%, -50%, 0)',
-            opacity: opacityRef.current,
-            transition: 'opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
-          }}
-        >
-          <div className="bg-black/90 backdrop-blur-sm rounded px-1.5 py-0.5 flex items-center gap-0.5 text-white text-xs font-bold whitespace-nowrap shadow-lg">
-            {/* Team 1 Logo */}
-            {match.matchInfo.team1.logo && (
-              <img 
-                src={match.matchInfo.team1.logo} 
-                alt={match.matchInfo.team1.name}
-                className="w-4 h-4 object-contain"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none'
-                }}
-              />
-            )}
-            
-            {/* Team 1 Score */}
-            <span className={`text-xs ${match.matchInfo.winner === 1 ? 'text-green-400' : 'text-white'}`}>
-              {match.matchInfo.score.team1}
-            </span>
-            
-            {/* VS */}
-            <span className="text-gray-400 text-xs">:</span>
-            
-            {/* Team 2 Score */}
-            <span className={`text-xs ${match.matchInfo.winner === 2 ? 'text-green-400' : 'text-white'}`}>
-              {match.matchInfo.score.team2}
-            </span>
-            
-            {/* Team 2 Logo */}
-            {match.matchInfo.team2.logo && (
-              <img 
-                src={match.matchInfo.team2.logo} 
-                alt={match.matchInfo.team2.name}
-                className="w-4 h-4 object-contain"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none'
-                }}
-              />
-            )}
-          </div>
-        </Html>
-      )}
+      {match.matchInfo && (() => {
+        // Determine which team is the searched team
+        const isTeam1Searched = searchedTeamName && match.matchInfo.team1.name.toLowerCase().includes(searchedTeamName.toLowerCase())
+        const isTeam2Searched = searchedTeamName && match.matchInfo.team2.name.toLowerCase().includes(searchedTeamName.toLowerCase())
+
+        // Determine colors based on searched team
+        const team1Color = isTeam1Searched
+          ? (match.matchInfo.winner === 1 ? 'text-green-400' : 'text-red-600')
+          : 'text-white'
+        const team2Color = isTeam2Searched
+          ? (match.matchInfo.winner === 2 ? 'text-green-400' : 'text-red-600')
+          : 'text-white'
+
+        return (
+          <Html
+            position={[0, -0.7, 0]}
+            center
+            transform
+            style={{
+              pointerEvents: 'none',
+              userSelect: 'none',
+              transform: 'translate3d(-50%, -50%, 0)',
+              opacity: opacityRef.current,
+              transition: 'opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
+            }}
+          >
+            <div className="bg-black/90 backdrop-blur-sm rounded px-1.5 py-0.5 flex items-center gap-0.5 text-white text-xs font-bold whitespace-nowrap shadow-lg">
+              {/* Team 1 Logo */}
+              {match.matchInfo.team1.logo && (
+                <img
+                  src={match.matchInfo.team1.logo}
+                  alt={match.matchInfo.team1.name}
+                  className="w-4 h-4 object-contain"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none'
+                  }}
+                />
+              )}
+
+              {/* Team 1 Score */}
+              <span className={`text-xs font-bold ${team1Color}`}>
+                {match.matchInfo.score.team1}
+              </span>
+
+              {/* VS */}
+              <span className="text-gray-400 text-xs">:</span>
+
+              {/* Team 2 Score */}
+              <span className={`text-xs font-bold ${team2Color}`}>
+                {match.matchInfo.score.team2}
+              </span>
+
+              {/* Team 2 Logo */}
+              {match.matchInfo.team2.logo && (
+                <img
+                  src={match.matchInfo.team2.logo}
+                  alt={match.matchInfo.team2.name}
+                  className="w-4 h-4 object-contain"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none'
+                  }}
+                />
+              )}
+            </div>
+          </Html>
+        )
+      })()}
     </group>
   )
 }
 
-export default function MatchScene3D({ 
-  matches, 
-  team1Name, 
-  team1Id, 
-  team2Name, 
-  team2Id, 
-  tournament, 
+export default function MatchScene3D({
+  matches,
+  team1Name,
+  team1Id,
+  team2Name,
+  team2Id,
+  tournament,
   playerName,
   initialSessionId,
   onAllThumbnailsLoaded,
@@ -449,7 +465,7 @@ export default function MatchScene3D({
   const [isSavingSession, setIsSavingSession] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const youtubeIframeRef = useRef<HTMLIFrameElement | null>(null)
-  
+
   // Update sessionId when initialSessionId changes (when loading an old session)
   useEffect(() => {
     if (initialSessionId) {
@@ -503,7 +519,7 @@ export default function MatchScene3D({
     }
 
     fetchMatchesWithNotes()
-    
+
     // Listen for notes-updated event to refresh
     const handleNotesUpdated = (event: CustomEvent) => {
       if (event.detail?.sessionId === sessionId) {
@@ -514,13 +530,13 @@ export default function MatchScene3D({
           try {
             const token = await clerkSession.getToken({ template: 'supabase' })
             if (!token) return
-            
+
             const response = await fetch(`/api/notes?session_id=${sessionId}`, {
               headers: {
                 'Authorization': `Bearer ${token}`
               }
             })
-            
+
             if (response.ok) {
               const notes = await response.json()
               const matchHrefsWithNotes = new Set<string>()
@@ -541,14 +557,14 @@ export default function MatchScene3D({
         refreshNotes()
       }
     }
-    
+
     window.addEventListener('notes-updated', handleNotesUpdated as EventListener)
-    
+
     return () => {
       window.removeEventListener('notes-updated', handleNotesUpdated as EventListener)
     }
   }, [sessionId, user, clerkSession])
-  
+
   // Filter only YouTube VODs with embed URLs and remove duplicates
   const youtubeMatches = useMemo(() => {
     const filtered = matches
@@ -559,15 +575,15 @@ export default function MatchScene3D({
         )
       }))
       .filter(m => m.vodLinks.length > 0)
-    
+
     // Remove duplicates based on matchId or href
     const uniqueMatches: Match[] = []
     const seenMatchIds = new Set<string>()
     const seenHrefs = new Set<string>()
-    
+
     for (const match of filtered) {
       const key = match.matchId || match.href
-      
+
       if (match.matchId && !seenMatchIds.has(match.matchId)) {
         seenMatchIds.add(match.matchId)
         uniqueMatches.push(match)
@@ -576,28 +592,28 @@ export default function MatchScene3D({
         uniqueMatches.push(match)
       }
     }
-    
+
     console.log(`Filtered to ${uniqueMatches.length} unique YouTube matches from ${matches.length} total matches (removed ${filtered.length - uniqueMatches.length} duplicates)`)
     return uniqueMatches
   }, [matches])
-  
+
   // Filter matches by date range and sort by date (newest first)
   const filteredMatches = useMemo(() => {
     let matches = youtubeMatches
-    
+
     // Apply date filter if not 'all'
     if (dateFilter !== 'all') {
       const days = parseInt(dateFilter)
       const cutoffDate = new Date()
       cutoffDate.setDate(cutoffDate.getDate() - days)
-      
+
       matches = matches.filter(match => {
         if (!match.date) return true // Include matches without dates
         const matchDate = new Date(match.date)
         return matchDate >= cutoffDate
       })
     }
-    
+
     // Sort by date: newest first (latest matches at the beginning)
     return matches.sort((a, b) => {
       if (!a.date && !b.date) return 0
@@ -606,17 +622,17 @@ export default function MatchScene3D({
       return new Date(b.date).getTime() - new Date(a.date).getTime()
     })
   }, [youtubeMatches, dateFilter])
-  
+
   // Progressive rendering: show matches one by one
   useEffect(() => {
     if (filteredMatches.length === 0) {
       setVisibleMatches(0)
       return
     }
-    
+
     // Reset visible matches when filter changes
     setVisibleMatches(0)
-    
+
     // Show matches progressively
     const interval = setInterval(() => {
       setVisibleMatches(prev => {
@@ -627,15 +643,15 @@ export default function MatchScene3D({
         return prev + 1
       })
     }, 100) // Show one match every 100ms
-    
+
     return () => clearInterval(interval)
   }, [filteredMatches.length, dateFilter])
-  
+
   // Get matches to display (progressive)
   const matchesToDisplay = useMemo(() => {
     return filteredMatches.slice(0, visibleMatches)
   }, [filteredMatches, visibleMatches])
-  
+
   // Generate positions for filtered matches
   const positions = useMemo(
     () => generateMatchPositions(filteredMatches.length),
@@ -657,7 +673,7 @@ export default function MatchScene3D({
         const firstVOD = match.vodLinks[0]
         return getYouTubeThumbnail(firstVOD?.url || '') !== null
       }).length
-      
+
       // If all thumbnails are loaded (or no thumbnails to load), notify parent
       if (loadedThumbnails.size >= matchesWithThumbnails || matchesWithThumbnails === 0) {
         // Small delay to ensure everything is settled
@@ -680,9 +696,9 @@ export default function MatchScene3D({
       // - Already saved
       // - Currently saving
       if (
-        filteredMatches.length === 0 || 
-        visibleMatches < filteredMatches.length || 
-        sessionId || 
+        filteredMatches.length === 0 ||
+        visibleMatches < filteredMatches.length ||
+        sessionId ||
         isSavingSession
       ) {
         return
@@ -700,7 +716,7 @@ export default function MatchScene3D({
         }
 
         const token = await clerkSession.getToken({ template: 'supabase' })
-        
+
         if (!token) {
           console.error('No token found - user should be logged in to search')
           setSaveError('Authentication required')
@@ -752,14 +768,14 @@ export default function MatchScene3D({
       return () => clearTimeout(timer)
     }
   }, [visibleMatches, filteredMatches.length, sessionId, isSavingSession, team1Name, team1Id, team2Name, team2Id, tournament, playerName])
-  
+
   const handleThumbnailClick = (match: Match) => {
     if (match.vodLinks.length > 0) {
       setSelectedMatch(match)
       setSelectedVOD(match.vodLinks[0])
     }
   }
-  
+
   const closeEmbed = () => {
     setSelectedMatch(null)
     setSelectedVOD(null)
@@ -779,7 +795,7 @@ export default function MatchScene3D({
         url.searchParams.set('origin', window.location.origin)
       }
       youtubeIframeRef.current.src = url.toString()
-      
+
       // Also try to use YouTube IFrame API if available
       if (youtubeIframeRef.current.contentWindow) {
         youtubeIframeRef.current.contentWindow.postMessage(
@@ -795,7 +811,7 @@ export default function MatchScene3D({
       console.error('Error jumping to timestamp:', error)
     }
   }
-  
+
   return (
     <>
       <div className="fixed inset-0 z-30">
@@ -809,13 +825,13 @@ export default function MatchScene3D({
             position={[0, 0, 15]}
             fov={75}
           />
-          
+
           {/* Lighting - increased for brighter thumbnails */}
           <ambientLight intensity={0.8} />
           <directionalLight position={[10, 10, 5]} intensity={1.2} />
           <pointLight position={[-10, -10, -5]} intensity={0.6} />
           <pointLight position={[0, 10, 0]} intensity={0.5} /> {/* Top light for better visibility */}
-          
+
           {/* Camera controls - only zoom, no rotation */}
           <OrbitControls
             enablePan={true}
@@ -823,7 +839,7 @@ export default function MatchScene3D({
             enableRotate={false} // Disable rotation
             panSpeed={1.5} // Faster panning
             zoomSpeed={1.2}
-            minDistance={5}
+            minDistance={1}
             maxDistance={80} // Increased max distance to see further back matches
             minPolarAngle={Math.PI / 2} // Lock to top-down view
             maxPolarAngle={Math.PI / 2}
@@ -840,24 +856,24 @@ export default function MatchScene3D({
               TWO: THREE.TOUCH.DOLLY_PAN // Two fingers to zoom and pan
             }}
           />
-          
+
           {/* Match tiles - progressive rendering with fade-in */}
           {matchesToDisplay.map((match, displayIndex) => {
             const firstVOD = match.vodLinks[0]
             const thumbnail = getYouTubeThumbnail(firstVOD.url)
             // Find the original index in filteredMatches for position
-            const originalIndex = filteredMatches.findIndex(m => 
-              (m.matchId && m.matchId === match.matchId) || 
+            const originalIndex = filteredMatches.findIndex(m =>
+              (m.matchId && m.matchId === match.matchId) ||
               (!m.matchId && m.href === match.href)
             )
-            
+
             // Check if this match should be visible (for fade-in animation)
             const isVisible = displayIndex < visibleMatches
             const hasNotes = matchesWithNotes.has(match.href)
             if (hasNotes) {
               console.log(`[MatchScene3D] Match ${match.href} has notes!`)
             }
-            
+
             return (
               <MatchTile
                 key={match.matchId || displayIndex}
@@ -868,6 +884,7 @@ export default function MatchScene3D({
                 index={originalIndex >= 0 ? originalIndex : displayIndex}
                 isVisible={isVisible}
                 hasNotes={hasNotes}
+                searchedTeamName={team1Name}
                 onThumbnailLoad={(idx) => {
                   setLoadedThumbnails(prev => new Set([...Array.from(prev), idx]))
                 }}
@@ -876,7 +893,7 @@ export default function MatchScene3D({
           })}
         </Canvas>
       </div>
-      
+
       {/* Date filter dropdown - top right */}
       <div className="fixed top-4 right-4 z-40">
         <Select value={dateFilter} onValueChange={(value: '30' | '50' | '90' | 'all') => setDateFilter(value)}>
@@ -891,7 +908,7 @@ export default function MatchScene3D({
           </SelectContent>
         </Select>
       </div>
-      
+
       {/* Info overlay */}
       <div className="fixed top-4 left-24 z-40 bg-white/90 backdrop-blur-sm rounded-lg px-4 py-2 shadow-lg">
         <div className="flex items-center justify-between gap-4">
@@ -934,7 +951,7 @@ export default function MatchScene3D({
               </p>
             )}
           </div>
-          
+
           {/* Session Save Status */}
           <div className="flex flex-col items-end gap-1">
             {isSavingSession ? (
@@ -958,7 +975,7 @@ export default function MatchScene3D({
           </div>
         </div>
       </div>
-      
+
       {/* Embed Modal */}
       <AnimatePresence>
         {selectedMatch && selectedVOD && selectedVOD.embedUrl && (
@@ -987,12 +1004,12 @@ export default function MatchScene3D({
                   >
                     <X className="w-6 h-6 text-white" />
                   </button>
-                  
+
                   {/* Embed iframe */}
                   <iframe
                     ref={youtubeIframeRef}
-                    src={selectedVOD.embedUrl.includes('enablejsapi') 
-                      ? selectedVOD.embedUrl 
+                    src={selectedVOD.embedUrl.includes('enablejsapi')
+                      ? selectedVOD.embedUrl
                       : `${selectedVOD.embedUrl}${selectedVOD.embedUrl.includes('?') ? '&' : '?'}enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}`}
                     className="w-full h-full"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -1000,7 +1017,7 @@ export default function MatchScene3D({
                     title={`Match ${selectedMatch.matchId} VOD`}
                   />
                 </div>
-                
+
                 {/* VOD selector if multiple VODs - now below the video */}
                 {selectedMatch.vodLinks.length > 1 && (
                   <div className="flex gap-2 overflow-x-auto px-1">
@@ -1008,11 +1025,10 @@ export default function MatchScene3D({
                       <button
                         key={index}
                         onClick={() => setSelectedVOD(vod)}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-                          selectedVOD === vod
-                            ? 'bg-purple-600 text-white shadow-lg'
-                            : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                        }`}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${selectedVOD === vod
+                          ? 'bg-purple-600 text-white shadow-lg'
+                          : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                          }`}
                       >
                         {vod.mapName || `YouTube ${index + 1}`}
                       </button>

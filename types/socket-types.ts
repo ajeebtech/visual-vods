@@ -5,7 +5,7 @@ import { NextApiResponse } from 'next'
 // Extend NextApiResponse to include Socket.IO server
 export interface NextApiResponseServerIO extends NextApiResponse {
     socket: NextApiResponse['socket'] & {
-        server: NextApiResponse['socket']['server'] & {
+        server: any & {
             io: SocketIOServer
         }
     }
