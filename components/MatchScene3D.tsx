@@ -3,8 +3,9 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera, Html } from '@react-three/drei'
+import { EffectComposer, Vignette } from '@react-three/postprocessing'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, ChevronDown, ChevronUp } from 'lucide-react'
+import { X, ChevronDown, ChevronUp, Check } from 'lucide-react'
 import * as THREE from 'three'
 import { useUser, useSession } from '@clerk/nextjs'
 import NotesPanel from '@/components/NotesPanel'
@@ -16,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { ScrollArea } from '@/components/ui/scroll-area'
 
 interface VODLink {
   url: string
@@ -396,7 +398,7 @@ function MatchTile({
               transition: 'opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
             }}
           >
-            <div 
+            <div
               className="backdrop-blur-sm rounded px-1.5 py-0.5 flex items-center gap-0.5 text-white text-xs font-bold whitespace-nowrap shadow-lg"
               style={{ backgroundColor: 'rgba(26, 26, 26, 0.95)' }}
             >
@@ -467,6 +469,7 @@ export default function MatchScene3D({
   const [sessionId, setSessionId] = useState<string | null>(initialSessionId || null)
   const [isSavingSession, setIsSavingSession] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [isSessionSaved, setIsSessionSaved] = useState(false)
   const youtubeIframeRef = useRef<HTMLIFrameElement | null>(null)
   const [mapStats, setMapStats] = useState<Array<{
     mapName: string
@@ -482,6 +485,7 @@ export default function MatchScene3D({
   useEffect(() => {
     if (initialSessionId) {
       setSessionId(initialSessionId)
+      setIsSessionSaved(true) // Existing session is already saved
     }
   }, [initialSessionId])
 
@@ -747,6 +751,7 @@ export default function MatchScene3D({
 
       setIsSavingSession(true)
       setSaveError(null)
+      setIsSessionSaved(false)
 
       try {
         if (!clerkSession) {
@@ -787,12 +792,14 @@ export default function MatchScene3D({
         if (response.ok) {
           const data = await response.json()
           setSessionId(data.id)
+          setIsSessionSaved(true)
           console.log('Session saved successfully:', data.id, `(${filteredMatches.length} matches)`)
           setSaveError(null)
         } else {
           const error = await response.json()
           console.error('Error saving session:', error)
           setSaveError(error.error || 'Failed to save session')
+          setIsSessionSaved(false)
         }
       } catch (error: any) {
         console.error('Error saving session:', error)
@@ -932,6 +939,11 @@ export default function MatchScene3D({
               />
             )
           })}
+
+          {/* Post-processing effects */}
+          <EffectComposer>
+            <Vignette eskil={false} offset={0.1} darkness={0.5} />
+          </EffectComposer>
         </Canvas>
       </div>
 
@@ -962,7 +974,7 @@ export default function MatchScene3D({
               onClick={() => setIsStatsMinimized(!isStatsMinimized)}
               className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
             >
-              <h3 className="text-sm font-semibold text-gray-900">
+              <h3 className="text-sm font-mono font-normal text-gray-900">
                 {team1Name} Map Stats
               </h3>
               <motion.div
@@ -983,12 +995,12 @@ export default function MatchScene3D({
                   transition={{ duration: 0.3, ease: 'easeInOut' }}
                   className="overflow-hidden"
                 >
-                  <div className="px-4 pb-4 max-h-[500px] overflow-y-auto">
-                    {isLoadingStats ? (
-                      <p className="text-xs text-gray-500">Loading stats...</p>
-                    ) : mapStats.length > 0 ? (
-                      <div className="space-y-3">
-                        {mapStats.map((stat, index) => (
+                  <ScrollArea className="h-[400px] px-4 pb-4 w-full [mask-image:linear-gradient(to_bottom,black_calc(100%-24px),transparent_100%)]">
+                    <div className="space-y-3 pr-3">
+                      {isLoadingStats ? (
+                        <p className="text-xs text-gray-500">Loading stats...</p>
+                      ) : mapStats.length > 0 ? (
+                        mapStats.map((stat, index) => (
                           <div
                             key={index}
                             className="border-b border-gray-200 pb-2 last:border-b-0 last:pb-0"
@@ -1014,12 +1026,12 @@ export default function MatchScene3D({
                               </div>
                             )}
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-gray-500">No stats available</p>
-                    )}
-                  </div>
+                        ))
+                      ) : (
+                        <p className="text-xs text-gray-500">No stats available</p>
+                      )}
+                    </div>
+                  </ScrollArea>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -1077,6 +1089,10 @@ export default function MatchScene3D({
                 <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
                 <span>Saving session...</span>
               </div>
+            ) : isSessionSaved && sessionId ? (
+              <div className="flex items-center justify-end">
+                <Check className="w-4 h-4 text-green-500" />
+              </div>
             ) : sessionId ? (
               <div className="flex items-center justify-end">
                 <div className="w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
@@ -1098,16 +1114,26 @@ export default function MatchScene3D({
       <AnimatePresence>
         {selectedMatch && selectedVOD && selectedVOD.embedUrl && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] bg-black/80 flex items-center justify-center p-4"
+            initial={{ opacity: 0, backdropFilter: 'blur(0px)' }}
+            animate={{ opacity: 1, backdropFilter: 'blur(8px)' }}
+            exit={{ opacity: 0, backdropFilter: 'blur(0px)' }}
+            transition={{ duration: 0.4 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+            style={{
+              background: 'radial-gradient(circle at center, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.95) 100%)'
+            }}
             onClick={closeEmbed}
           >
             <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
+              initial={{ scale: 0.8, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{
+                type: "spring",
+                stiffness: 300,
+                damping: 25,
+                duration: 0.5
+              }}
               className="relative w-full max-w-7xl flex gap-4"
               onClick={(e) => e.stopPropagation()}
             >
