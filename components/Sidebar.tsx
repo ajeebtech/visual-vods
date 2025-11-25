@@ -1035,10 +1035,10 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                                                 className={`w-4 h-4 transition-transform ${showHistory ? 'rotate-180' : ''}`}
                                             />
                                         </motion.div>
-                                    )}
-                                </AnimatePresence>
-                            </button>
-                        </Tooltip>
+                            )}
+                        </AnimatePresence>
+                    </button>
+                </Tooltip>
 
                         {/* History List */}
                         <AnimatePresence>

@@ -112,6 +112,7 @@ export default function TacticalMapModal({ open, onOpenChange, initialMap, sessi
     const mapContainerRef = useRef<HTMLDivElement>(null)
     const mapRef = useRef<HTMLDivElement>(null)
     const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null)
+    const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
     // Draw on canvas
     useEffect(() => {
@@ -882,7 +883,7 @@ export default function TacticalMapModal({ open, onOpenChange, initialMap, sessi
                                                 onDoubleClick={() => removeAgent(placedAgent.id)}
                                             >
                                                 <div
-                                                    className="w-12 h-12 rounded-full flex items-center justify-center border-2 border-white shadow-lg overflow-hidden"
+                                                    className="w-8 h-8 rounded-lg flex items-center justify-center border-2 border-white shadow-lg overflow-hidden"
                                                     style={{ backgroundColor: agent.color }}
                                                 >
                                                     <img
@@ -952,8 +953,16 @@ export default function TacticalMapModal({ open, onOpenChange, initialMap, sessi
                                         key={agent.id}
                                         className="relative"
                                         whileHover={{ y: -2 }}
-                                        onMouseEnter={() => setHoveredToolbarAgent(agent.id)}
-                                        onMouseLeave={() => setHoveredToolbarAgent(null)}
+                                        onMouseEnter={() => {
+                                            if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current)
+                                            hoverTimeoutRef.current = setTimeout(() => {
+                                                setHoveredToolbarAgent(agent.id)
+                                            }, 500)
+                                        }}
+                                        onMouseLeave={() => {
+                                            if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current)
+                                            setHoveredToolbarAgent(null)
+                                        }}
                                     >
                                         {/* Agent Avatar */}
                                         <div

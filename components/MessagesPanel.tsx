@@ -686,16 +686,16 @@ export default function MessagesPanel({ friends, onClose, sessionToShare }: Mess
   // Add friends that don't already have a conversation entry
   friends.forEach(friend => {
     if (!friendsWithConversations.has(friend.friend.id)) {
-      allConversations.push({
-        id: friend.friend.id,
-        type: 'direct',
-        name: friend.friend.username,
-        avatar_url: friend.friend.avatar_url,
+    allConversations.push({
+      id: friend.friend.id,
+      type: 'direct',
+      name: friend.friend.username,
+      avatar_url: friend.friend.avatar_url,
         lastMessage: '',
         lastMessageTime: '',
         unreadCount: 0,
-        userId: friend.friend.id
-      })
+      userId: friend.friend.id
+    })
     }
   })
 

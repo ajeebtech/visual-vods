@@ -4,7 +4,7 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera, Html } from '@react-three/drei'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X } from 'lucide-react'
+import { X, ChevronDown, ChevronUp } from 'lucide-react'
 import * as THREE from 'three'
 import { useUser, useSession } from '@clerk/nextjs'
 import NotesPanel from '@/components/NotesPanel'
@@ -396,7 +396,10 @@ function MatchTile({
               transition: 'opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
             }}
           >
-            <div className="bg-black/90 backdrop-blur-sm rounded px-1.5 py-0.5 flex items-center gap-0.5 text-white text-xs font-bold whitespace-nowrap shadow-lg">
+            <div 
+              className="backdrop-blur-sm rounded px-1.5 py-0.5 flex items-center gap-0.5 text-white text-xs font-bold whitespace-nowrap shadow-lg"
+              style={{ backgroundColor: 'rgba(26, 26, 26, 0.95)' }}
+            >
               {/* Team 1 Logo */}
               {match.matchInfo.team1.logo && (
                 <img
@@ -465,6 +468,15 @@ export default function MatchScene3D({
   const [isSavingSession, setIsSavingSession] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const youtubeIframeRef = useRef<HTMLIFrameElement | null>(null)
+  const [mapStats, setMapStats] = useState<Array<{
+    mapName: string
+    winPercent: string
+    wins: number
+    losses: number
+    mostPlayedComp: string[]
+  }>>([])
+  const [isLoadingStats, setIsLoadingStats] = useState(false)
+  const [isStatsMinimized, setIsStatsMinimized] = useState(false)
 
   // Update sessionId when initialSessionId changes (when loading an old session)
   useEffect(() => {
@@ -564,6 +576,35 @@ export default function MatchScene3D({
       window.removeEventListener('notes-updated', handleNotesUpdated as EventListener)
     }
   }, [sessionId, user, clerkSession])
+
+  // Fetch team map stats when team1Id changes
+  useEffect(() => {
+    const fetchTeamStats = async () => {
+      if (!team1Id) {
+        setMapStats([])
+        return
+      }
+
+      setIsLoadingStats(true)
+      try {
+        const response = await fetch(`/api/vlr-team-stats?teamId=${team1Id}`)
+        if (response.ok) {
+          const data = await response.json()
+          setMapStats(data.mapStats || [])
+        } else {
+          console.error('Failed to fetch team stats')
+          setMapStats([])
+        }
+      } catch (error) {
+        console.error('Error fetching team stats:', error)
+        setMapStats([])
+      } finally {
+        setIsLoadingStats(false)
+      }
+    }
+
+    fetchTeamStats()
+  }, [team1Id])
 
   // Filter only YouTube VODs with embed URLs and remove duplicates
   const youtubeMatches = useMemo(() => {
@@ -894,8 +935,8 @@ export default function MatchScene3D({
         </Canvas>
       </div>
 
-      {/* Date filter dropdown - top right */}
-      <div className="fixed top-4 right-4 z-40">
+      {/* Date filter dropdown and team stats - top right */}
+      <div className="fixed top-4 right-4 z-40 flex flex-col gap-3 items-end">
         <Select value={dateFilter} onValueChange={(value: '30' | '50' | '90' | 'all') => setDateFilter(value)}>
           <SelectTrigger className="w-32 bg-white/90 backdrop-blur-sm text-gray-900">
             <SelectValue placeholder="Filter by date" />
@@ -907,6 +948,83 @@ export default function MatchScene3D({
             <SelectItem value="90" className="text-gray-900 focus:text-gray-900 focus:bg-gray-100">Last 90 days</SelectItem>
           </SelectContent>
         </Select>
+
+        {/* Team Map Stats */}
+        {team1Id && team1Name && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="bg-white/95 backdrop-blur-sm rounded-lg shadow-lg max-w-md w-80 overflow-hidden"
+          >
+            {/* Header with minimize button */}
+            <button
+              onClick={() => setIsStatsMinimized(!isStatsMinimized)}
+              className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
+            >
+              <h3 className="text-sm font-semibold text-gray-900">
+                {team1Name} Map Stats
+              </h3>
+              <motion.div
+                animate={{ rotate: isStatsMinimized ? 0 : 180 }}
+                transition={{ duration: 0.2 }}
+              >
+                <ChevronDown className="w-4 h-4 text-gray-600" />
+              </motion.div>
+            </button>
+
+            {/* Stats content with collapse animation */}
+            <AnimatePresence>
+              {!isStatsMinimized && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.3, ease: 'easeInOut' }}
+                  className="overflow-hidden"
+                >
+                  <div className="px-4 pb-4 max-h-[500px] overflow-y-auto">
+                    {isLoadingStats ? (
+                      <p className="text-xs text-gray-500">Loading stats...</p>
+                    ) : mapStats.length > 0 ? (
+                      <div className="space-y-3">
+                        {mapStats.map((stat, index) => (
+                          <div
+                            key={index}
+                            className="border-b border-gray-200 pb-2 last:border-b-0 last:pb-0"
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-medium text-gray-900">
+                                {stat.mapName}
+                              </span>
+                              <span className="text-xs text-gray-600">
+                                {stat.winPercent} ({stat.wins}W-{stat.losses}L)
+                              </span>
+                            </div>
+                            {stat.mostPlayedComp.length > 0 && (
+                              <div className="flex items-center gap-1 mt-1">
+                                {stat.mostPlayedComp.map((agent, agentIndex) => (
+                                  <img
+                                    key={agentIndex}
+                                    src={`https://www.vlr.gg/img/vlr/game/agents/${agent}.png`}
+                                    alt={agent.charAt(0).toUpperCase() + agent.slice(1)}
+                                    style={{ width: '25px', marginLeft: agentIndex === 0 ? '0' : '8px', display: 'inline-block' }}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-500">No stats available</p>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        )}
       </div>
 
       {/* Info overlay */}
