@@ -973,46 +973,46 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
 
     return (
         <>
-            <motion.div
-                ref={sidebarRef}
-                initial={{ width: '80px' }}
-                animate={{ width: isExpanded ? '400px' : '80px' }}
-                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                className="fixed left-0 top-0 h-full bg-white/80 backdrop-blur-xl border-r border-gray-200 z-[100] flex flex-col overflow-hidden"
-            >
-                {/* Top Logo Area */}
-                <div className="p-6 flex items-center gap-4">
+        <motion.div
+            ref={sidebarRef}
+            initial={{ width: '80px' }}
+            animate={{ width: isExpanded ? '400px' : '80px' }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            className="fixed left-0 top-0 h-full bg-white/80 backdrop-blur-xl border-r border-gray-200 z-[100] flex flex-col overflow-hidden"
+        >
+            {/* Top Logo Area */}
+            <div className="p-6 flex items-center gap-4">
                     <img 
                         src="/logo.png" 
                         alt="Logo" 
                         className="w-16 h-16 flex-shrink-0 object-contain"
                     />
-                    <AnimatePresence>
-                        {isExpanded && (
-                            <motion.h1
-                                initial={{ opacity: 0, x: -20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                exit={{ opacity: 0, x: -20 }}
-                                className="text-2xl font-bold text-black whitespace-nowrap"
-                            >
+                <AnimatePresence>
+                    {isExpanded && (
+                        <motion.h1
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -20 }}
+                            className="text-2xl font-bold text-black whitespace-nowrap"
+                        >
                                 my sessions
-                            </motion.h1>
-                        )}
-                    </AnimatePresence>
-                </div>
+                        </motion.h1>
+                    )}
+                </AnimatePresence>
+            </div>
 
-                {/* Navigation Items */}
-                <div className="flex-1 flex flex-col gap-8 px-6 mt-8">
+            {/* Navigation Items */}
+            <div className="flex-1 flex flex-col gap-8 px-6 mt-8">
                     {/* History Icon */}
                     <div className="flex flex-col">
-                        <Tooltip
+                <Tooltip
                             content="Session history"
-                            placement="right"
-                            classNames={{
-                                content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
-                            }}
-                        >
-                            <button
+                    placement="right"
+                    classNames={{
+                        content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
+                    }}
+                >
+                    <button
                                 onClick={() => {
                                     if (!isExpanded) {
                                         setIsExpanded(true)
@@ -1022,12 +1022,12 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                                 className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors"
                             >
                                 <Clock className="w-6 h-6 flex-shrink-0" />
-                                <AnimatePresence>
-                                    {isExpanded && (
+                        <AnimatePresence>
+                            {isExpanded && (
                                         <motion.div
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                            exit={{ opacity: 0 }}
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
                                             className="flex items-center justify-between flex-1"
                                         >
                                             <span className="whitespace-nowrap font-medium">History</span>
@@ -1151,13 +1151,13 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
 
                     {/* Friends Icon */}
                     <div className="flex flex-col">
-                        <Tooltip
+                <Tooltip
                             content="Friends"
-                            placement="right"
-                            classNames={{
-                                content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
-                            }}
-                        >
+                    placement="right"
+                    classNames={{
+                        content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
+                    }}
+                >
                             <button
                                 onClick={() => {
                                     if (!isExpanded) {
@@ -1168,12 +1168,12 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                                 className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors"
                             >
                                 <Users className="w-6 h-6 flex-shrink-0" />
-                                <AnimatePresence>
-                                    {isExpanded && (
+                        <AnimatePresence>
+                            {isExpanded && (
                                         <motion.div
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                            exit={{ opacity: 0 }}
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
                                             className="flex items-center justify-between flex-1"
                                         >
                                             <span className="whitespace-nowrap font-medium">Friends</span>
@@ -1181,10 +1181,10 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                                                 className={`w-4 h-4 transition-transform ${showFriends ? 'rotate-180' : ''}`}
                                             />
                                         </motion.div>
-                                    )}
-                                </AnimatePresence>
-                            </button>
-                        </Tooltip>
+                            )}
+                        </AnimatePresence>
+                    </button>
+                </Tooltip>
 
                         {/* Friends Section */}
                         <AnimatePresence>
@@ -1381,31 +1381,31 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
 
                     {/* Projects Icon */}
                     <div className="flex flex-col">
-                        <Tooltip
+                <Tooltip
                             content="Projects"
-                            placement="right"
-                            classNames={{
-                                content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
-                            }}
-                        >
-                            <button
+                    placement="right"
+                    classNames={{
+                        content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
+                    }}
+                >
+                    <button
                                 onClick={() => {
                                     if (!isExpanded) {
                                         setIsExpanded(true)
                                     }
                                     setShowProjects(!showProjects)
                                 }}
-                                className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors"
-                            >
+                        className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors"
+                    >
                                 <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
                                     <CurateSessionIcon className="w-6 h-6" />
                                 </div>
-                                <AnimatePresence>
-                                    {isExpanded && (
+                        <AnimatePresence>
+                            {isExpanded && (
                                         <motion.div
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                            exit={{ opacity: 0 }}
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
                                             className="flex items-center justify-between flex-1"
                                         >
                                             <span className="whitespace-nowrap font-medium">Projects</span>
@@ -1413,10 +1413,10 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                                                 className={`w-4 h-4 transition-transform ${showProjects ? 'rotate-180' : ''}`}
                                             />
                                         </motion.div>
-                                    )}
-                                </AnimatePresence>
-                            </button>
-                        </Tooltip>
+                            )}
+                        </AnimatePresence>
+                    </button>
+                </Tooltip>
 
                         {/* Projects List */}
                         <AnimatePresence>
@@ -1474,16 +1474,16 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                         </AnimatePresence>
                     </div>
 
-                    {/* Expanded Content Area */}
-                    <AnimatePresence>
-                        {isExpanded && (
-                            <motion.div
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
-                                className="mt-4 flex-1 flex flex-col"
-                            >
-                                {/* Controls */}
+                {/* Expanded Content Area */}
+                <AnimatePresence>
+                    {isExpanded && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="mt-4 flex-1 flex flex-col"
+                        >
+                            {/* Controls */}
                                 <div className="flex items-center justify-between mb-4 text-sm text-gray-600">
                                     <div className="relative flex-1 mr-4">
                                         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -1495,11 +1495,11 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                                             className="w-full pl-10 pr-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                         />
                                     </div>
-                                    <button className="flex items-center gap-1 hover:text-black">
-                                        Sort
-                                        <AlignLeft className="w-4 h-4 rotate-180" />
-                                    </button>
-                                </div>
+                                <button className="flex items-center gap-1 hover:text-black">
+                                    Sort
+                                    <AlignLeft className="w-4 h-4 rotate-180" />
+                                </button>
+                            </div>
 
                                 {/* Search Results */}
                                 {findSearchQuery.trim() !== '' ? (
@@ -1567,54 +1567,54 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                                     </div>
                                 ) : (
                                     /* Empty State */
-                                    <div className="flex-1 flex flex-col items-center justify-center text-center text-gray-500">
+                            <div className="flex-1 flex flex-col items-center justify-center text-center text-gray-500">
                                         <h3 className="text-lg font-medium text-black mb-2">search for your projects and sessions here</h3>
-                                        <p className="text-sm max-w-[200px]">
+                                <p className="text-sm max-w-[200px]">
                                             they will appear here after you create them.
-                                        </p>
-                                    </div>
+                                </p>
+                            </div>
                                 )}
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-                </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </div>
 
-                {/* Bottom Actions */}
-                <div className="p-6 flex flex-col gap-6">
-                    <Tooltip
-                        content="Settings"
-                        placement="right"
-                        classNames={{
-                            content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
-                        }}
-                    >
+            {/* Bottom Actions */}
+            <div className="p-6 flex flex-col gap-6">
+                <Tooltip
+                    content="Settings"
+                    placement="right"
+                    classNames={{
+                        content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
+                    }}
+                >
                         <button
                             onClick={() => setIsSettingsOpen(true)}
                             className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors"
                         >
-                            <Settings className="w-6 h-6 flex-shrink-0" />
-                            <AnimatePresence>
-                                {isExpanded && (
-                                    <motion.span
-                                        initial={{ opacity: 0 }}
-                                        animate={{ opacity: 1 }}
-                                        exit={{ opacity: 0 }}
-                                        className="whitespace-nowrap font-medium"
-                                    >
-                                        Settings
-                                    </motion.span>
-                                )}
-                            </AnimatePresence>
-                        </button>
-                    </Tooltip>
+                        <Settings className="w-6 h-6 flex-shrink-0" />
+                        <AnimatePresence>
+                            {isExpanded && (
+                                <motion.span
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="whitespace-nowrap font-medium"
+                                >
+                                    Settings
+                                </motion.span>
+                            )}
+                        </AnimatePresence>
+                    </button>
+                </Tooltip>
 
-                    <Tooltip
-                        content="Profile"
-                        placement="right"
-                        classNames={{
-                            content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
-                        }}
-                    >
+                <Tooltip
+                    content="Profile"
+                    placement="right"
+                    classNames={{
+                        content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
+                    }}
+                >
                         <button 
                             className="flex items-center gap-4"
                             onClick={() => {
@@ -1629,7 +1629,7 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                                     <img
                                         key={`avatar-${avatarUrl}-${avatarKey}`}
                                         src={`${avatarUrl}${avatarUrl.includes('?') ? '&' : '?'}_t=${avatarKey}`}
-                                        alt="Profile"
+                                alt="Profile"
                                         className="w-full h-full object-cover block"
                                         style={{ display: 'block' }}
                                         onLoad={() => {
@@ -1653,29 +1653,29 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                                         <User className="w-5 h-5 text-gray-400" />
                                     </div>
                                 )}
-                            </div>
-                            <AnimatePresence>
-                                {isExpanded && (
-                                    <motion.div
-                                        initial={{ opacity: 0 }}
-                                        animate={{ opacity: 1 }}
-                                        exit={{ opacity: 0 }}
-                                        className="text-left"
-                                    >
+                        </div>
+                        <AnimatePresence>
+                            {isExpanded && (
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="text-left"
+                                >
                                         <div className="text-sm font-medium text-black">{username}</div>
                                         <div className="text-xs text-gray-500">
                                             {clerkUser ? 'View Profile' : 'Sign in to view profile'}
                                         </div>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-                        </button>
-                    </Tooltip>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </button>
+                </Tooltip>
 
                     {/* Auth Button */}
                     <div className="pt-4 border-t border-gray-200">
                         <AuthButton isSidebarExpanded={isExpanded} />
-                    </div>
+            </div>
                 </div>
 
                 {/* Settings Modal - rendered via portal at body level */}
@@ -1685,7 +1685,7 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                     username={username}
                     avatarUrl={avatarUrl || undefined}
                 />
-            </motion.div>
+        </motion.div>
 
             {/* Floating Messages Button - Bottom Right */}
             <motion.button

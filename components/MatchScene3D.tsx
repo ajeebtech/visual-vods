@@ -974,7 +974,7 @@ export default function MatchScene3D({
               onClick={() => setIsStatsMinimized(!isStatsMinimized)}
               className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
             >
-              <h3 className="text-sm font-mono font-normal text-gray-900">
+              <h3 className="text-sm font-semibold text-gray-900">
                 {team1Name} Map Stats
               </h3>
               <motion.div
@@ -1000,33 +1000,47 @@ export default function MatchScene3D({
                       {isLoadingStats ? (
                         <p className="text-xs text-gray-500">Loading stats...</p>
                       ) : mapStats.length > 0 ? (
-                        mapStats.map((stat, index) => (
-                          <div
-                            key={index}
-                            className="border-b border-gray-200 pb-2 last:border-b-0 last:pb-0"
-                          >
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-sm font-medium text-gray-900">
-                                {stat.mapName}
-                              </span>
-                              <span className="text-xs text-gray-600">
-                                {stat.winPercent} ({stat.wins}W-{stat.losses}L)
-                              </span>
-                            </div>
-                            {stat.mostPlayedComp.length > 0 && (
-                              <div className="flex items-center gap-1 mt-1">
-                                {stat.mostPlayedComp.map((agent, agentIndex) => (
-                                  <img
-                                    key={agentIndex}
-                                    src={`https://www.vlr.gg/img/vlr/game/agents/${agent}.png`}
-                                    alt={agent.charAt(0).toUpperCase() + agent.slice(1)}
-                                    style={{ width: '25px', marginLeft: agentIndex === 0 ? '0' : '8px', display: 'inline-block' }}
-                                  />
-                                ))}
+                        mapStats.map((stat, index) => {
+                          const winPercentValue = parseFloat(stat.winPercent)
+                          const isPositiveWinRate = !isNaN(winPercentValue) && winPercentValue > 50
+                          const isNegativeWinRate = !isNaN(winPercentValue) && winPercentValue < 50
+
+                          return (
+                            <div
+                              key={index}
+                              className="border-b border-gray-200 pb-2 last:border-b-0 last:pb-0"
+                            >
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-sm font-medium text-gray-900">
+                                  {stat.mapName}
+                                </span>
+                                <span
+                                  className={`text-xs ${
+                                    isPositiveWinRate 
+                                      ? 'text-green-500 font-semibold' 
+                                      : isNegativeWinRate 
+                                      ? 'text-red-500 font-semibold' 
+                                      : 'text-gray-600'
+                                  }`}
+                                >
+                                  {stat.winPercent} ({stat.wins}W-{stat.losses}L)
+                                </span>
                               </div>
-                            )}
-                          </div>
-                        ))
+                              {stat.mostPlayedComp.length > 0 && (
+                                <div className="flex items-center gap-1 mt-1">
+                                  {stat.mostPlayedComp.map((agent, agentIndex) => (
+                                    <img
+                                      key={agentIndex}
+                                      src={`https://www.vlr.gg/img/vlr/game/agents/${agent}.png`}
+                                      alt={agent.charAt(0).toUpperCase() + agent.slice(1)}
+                                      style={{ width: '25px', marginLeft: agentIndex === 0 ? '0' : '8px', display: 'inline-block' }}
+                                    />
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })
                       ) : (
                         <p className="text-xs text-gray-500">No stats available</p>
                       )}
