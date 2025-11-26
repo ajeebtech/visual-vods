@@ -86,58 +86,44 @@ const getYouTubeThumbnail = (url: string): string | null => {
   return null
 }
 
-// Generate scattered positions with older matches further back
-function generateMatchPositions(count: number): Array<[number, number, number]> {
-  const positions: Array<[number, number, number]> = []
-  const spread = 5 // Reduced spread - how far to spread on x and y axes
-  const minDistance = 1.8 // Minimum distance between thumbnails to avoid overlap
-  const usedPositions: Array<[number, number]> = []
+// Generate cylindrical spiral positions
+function generateMatchPositions(count: number): Array<{ position: [number, number, number], rotation: [number, number, number] }> {
+  const positions: Array<{ position: [number, number, number], rotation: [number, number, number] }> = []
+
+  const radius = 8
+  const thumbnailWidth = 2
+  const thumbnailHeight = 1.125
+  const gap = 0.2
+  const verticalGap = 0.5
+
+  // Calculate angle step based on arc length
+  // arcLength = radius * angle
+  // angle = arcLength / radius
+  const angleStep = (thumbnailWidth + gap) / radius
+
+  // Calculate vertical drop per item to create a spiral
+  // We want to drop by (height + verticalGap) for every full revolution
+  const itemsPerRevolution = (2 * Math.PI) / angleStep
+  const verticalStep = (thumbnailHeight + verticalGap) / itemsPerRevolution
 
   for (let i = 0; i < count; i++) {
-    let attempts = 0
-    let x: number = 0
-    let y: number = 0
-    let validPosition = false
+    const angle = i * angleStep
+    // Start from y=2 and spiral down
+    const y = 2 - (i * verticalStep)
 
-    // Try to find a position that doesn't overlap
-    while (!validPosition && attempts < 50) {
-      // Scatter randomly on x and y, but closer together
-      x = (Math.random() - 0.5) * spread * 2
-      y = (Math.random() - 0.5) * spread * 2
+    const x = radius * Math.sin(angle)
+    const z = radius * Math.cos(angle)
 
-      // Check if this position is too close to existing positions
-      validPosition = usedPositions.every(([usedX, usedY]) => {
-        const distance = Math.sqrt((x - usedX) ** 2 + (y - usedY) ** 2)
-        return distance >= minDistance
-      })
+    // Rotate to face outwards from center
+    // The plane is initially facing +Z (or depending on geometry), usually we want it to face the camera
+    // If camera is at (0,0,0) looking out, we want it to face (0,0,0).
+    // But here we are looking AT the cylinder from outside.
+    // So we want the tile to face OUTWARDS.
+    // At angle 0 (z=radius, x=0), it should face +Z.
+    // Rotation around Y axis should be 'angle'.
+    const rotation: [number, number, number] = [0, angle, 0]
 
-      attempts++
-    }
-
-    // If we couldn't find a non-overlapping position, use a grid-based fallback
-    if (!validPosition) {
-      const cols = Math.ceil(Math.sqrt(count))
-      const row = Math.floor(i / cols)
-      const col = i % cols
-      x = (col - (cols - 1) / 2) * minDistance
-      y = (row - (count / cols - 1) / 2) * minDistance
-    }
-
-    usedPositions.push([x, y])
-
-    // Calculate z-depth: latest 20 matches (first 20 after sorting newest-first) are closer to camera
-    let z: number
-    if (i < 20) {
-      // Latest 20 matches: closer to camera (0 to -3)
-      z = -Math.random() * 3
-    } else {
-      // Older matches: further back (-3 to -15, with older ones further)
-      const age = i - 20 // How many matches after the latest 20
-      const maxDepth = -3 - (age * 0.4) // Each older match goes further back
-      z = -3 - Math.random() * Math.min(12, maxDepth + 3)
-    }
-
-    positions.push([x, y, z])
+    positions.push({ position: [x, y, z], rotation })
   }
 
   return positions
@@ -146,6 +132,7 @@ function generateMatchPositions(count: number): Array<[number, number, number]> 
 // 3D Match Tile Component with fade-in animation
 function MatchTile({
   position,
+  rotation,
   thumbnail,
   match,
   onSelect,
@@ -156,6 +143,7 @@ function MatchTile({
   searchedTeamName,
 }: {
   position: [number, number, number]
+  rotation: [number, number, number]
   thumbnail: string | null
   match: Match
   onSelect: () => void
@@ -284,11 +272,11 @@ function MatchTile({
   const purpleColor = new THREE.Color(0x9333ea)
 
   return (
-    <group position={position}>
+    <group position={position} rotation={rotation}>
       {/* Thumbnail plane */}
       <mesh
         ref={meshRef}
-        rotation={[0, 0, 0]} // Face camera (top-down view)
+        rotation={[0, 0, 0]} // Already rotated by group
         onPointerOver={() => setHovered(true)}
         onPointerOut={() => setHovered(false)}
         onClick={onSelect}
@@ -390,6 +378,7 @@ function MatchTile({
             position={[0, -0.7, 0]}
             center
             transform
+            scale={0.5} // Scale down to 50% to counteract the 2x CSS size
             style={{
               pointerEvents: 'none',
               userSelect: 'none',
@@ -399,7 +388,7 @@ function MatchTile({
             }}
           >
             <div
-              className="backdrop-blur-sm rounded px-1.5 py-0.5 flex items-center gap-0.5 text-white text-xs font-bold whitespace-nowrap shadow-lg"
+              className="backdrop-blur-sm rounded-lg px-3 py-1 flex items-center gap-1 text-white text-2xl font-bold whitespace-nowrap shadow-lg"
               style={{ backgroundColor: 'rgba(26, 26, 26, 0.95)' }}
             >
               {/* Team 1 Logo */}
@@ -407,7 +396,7 @@ function MatchTile({
                 <img
                   src={match.matchInfo.team1.logo}
                   alt={match.matchInfo.team1.name}
-                  className="w-4 h-4 object-contain"
+                  className="w-8 h-8 object-contain"
                   onError={(e) => {
                     (e.target as HTMLImageElement).style.display = 'none'
                   }}
@@ -415,15 +404,15 @@ function MatchTile({
               )}
 
               {/* Team 1 Score */}
-              <span className={`text-xs font-bold ${team1Color}`}>
+              <span className={`text-2xl font-bold ${team1Color}`}>
                 {match.matchInfo.score.team1}
               </span>
 
               {/* VS */}
-              <span className="text-gray-400 text-xs">:</span>
+              <span className="text-gray-400 text-xl">:</span>
 
               {/* Team 2 Score */}
-              <span className={`text-xs font-bold ${team2Color}`}>
+              <span className={`text-2xl font-bold ${team2Color}`}>
                 {match.matchInfo.score.team2}
               </span>
 
@@ -432,7 +421,7 @@ function MatchTile({
                 <img
                   src={match.matchInfo.team2.logo}
                   alt={match.matchInfo.team2.name}
-                  className="w-4 h-4 object-contain"
+                  className="w-8 h-8 object-contain"
                   onError={(e) => {
                     (e.target as HTMLImageElement).style.display = 'none'
                   }}
@@ -882,27 +871,17 @@ export default function MatchScene3D({
 
           {/* Camera controls - only zoom, no rotation */}
           <OrbitControls
-            enablePan={true}
+            enablePan={false} // Disable panning as requested
             enableZoom={true}
-            enableRotate={false} // Disable rotation
-            panSpeed={1.5} // Faster panning
+            enableRotate={true}
+            autoRotate={false}
             zoomSpeed={1.2}
-            minDistance={1}
-            maxDistance={80} // Increased max distance to see further back matches
-            minPolarAngle={Math.PI / 2} // Lock to top-down view
-            maxPolarAngle={Math.PI / 2}
-            minAzimuthAngle={-Infinity} // Allow full horizontal panning
+            minDistance={5}
+            maxDistance={40}
+            minPolarAngle={Math.PI / 4} // Allow viewing from side
+            maxPolarAngle={Math.PI / 1.5}
+            minAzimuthAngle={-Infinity} // Allow full horizontal rotation
             maxAzimuthAngle={Infinity}
-            screenSpacePanning={true} // Pan in screen space (easier to move up/down/left/right)
-            mouseButtons={{
-              LEFT: THREE.MOUSE.PAN, // Left click to pan
-              MIDDLE: THREE.MOUSE.DOLLY, // Middle mouse to zoom
-              RIGHT: THREE.MOUSE.PAN // Right click also pans
-            }}
-            touches={{
-              ONE: THREE.TOUCH.PAN, // One finger to pan
-              TWO: THREE.TOUCH.DOLLY_PAN // Two fingers to zoom and pan
-            }}
           />
 
           {/* Match tiles - progressive rendering with fade-in */}
@@ -925,7 +904,8 @@ export default function MatchScene3D({
             return (
               <MatchTile
                 key={match.matchId || displayIndex}
-                position={positions[originalIndex >= 0 ? originalIndex : displayIndex]}
+                position={positions[originalIndex >= 0 ? originalIndex : displayIndex].position}
+                rotation={positions[originalIndex >= 0 ? originalIndex : displayIndex].rotation}
                 thumbnail={thumbnail}
                 match={match}
                 onSelect={() => handleThumbnailClick(match)}
@@ -973,10 +953,10 @@ export default function MatchScene3D({
             <button
               onClick={() => setIsStatsMinimized(!isStatsMinimized)}
               className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
-          >
+            >
               <h3 className="text-sm font-semibold text-gray-900">
-              {team1Name} Map Stats
-            </h3>
+                {team1Name} Map Stats
+              </h3>
               <motion.div
                 animate={{ rotate: isStatsMinimized ? 0 : 180 }}
                 transition={{ duration: 0.2 }}
@@ -997,53 +977,52 @@ export default function MatchScene3D({
                 >
                   <ScrollArea className="h-[400px] px-4 pb-4 w-full [mask-image:linear-gradient(to_bottom,black_calc(100%-24px),transparent_100%)]">
                     <div className="space-y-3 pr-3">
-            {isLoadingStats ? (
-              <p className="text-xs text-gray-500">Loading stats...</p>
-            ) : mapStats.length > 0 ? (
+                      {isLoadingStats ? (
+                        <p className="text-xs text-gray-500">Loading stats...</p>
+                      ) : mapStats.length > 0 ? (
                         mapStats.map((stat, index) => {
                           const winPercentValue = parseFloat(stat.winPercent)
                           const isPositiveWinRate = !isNaN(winPercentValue) && winPercentValue > 50
                           const isNegativeWinRate = !isNaN(winPercentValue) && winPercentValue < 50
 
                           return (
-                  <div
-                    key={index}
-                    className="border-b border-gray-200 pb-2 last:border-b-0 last:pb-0"
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium text-gray-900">
-                        {stat.mapName}
-                      </span>
+                            <div
+                              key={index}
+                              className="border-b border-gray-200 pb-2 last:border-b-0 last:pb-0"
+                            >
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-sm font-medium text-gray-900">
+                                  {stat.mapName}
+                                </span>
                                 <span
-                                  className={`text-xs ${
-                                    isPositiveWinRate 
-                                      ? 'text-green-500 font-semibold' 
-                                      : isNegativeWinRate 
-                                      ? 'text-red-500 font-semibold' 
+                                  className={`text-xs ${isPositiveWinRate
+                                    ? 'text-green-500 font-semibold'
+                                    : isNegativeWinRate
+                                      ? 'text-red-500 font-semibold'
                                       : 'text-gray-600'
-                                  }`}
+                                    }`}
                                 >
-                        {stat.winPercent} ({stat.wins}W-{stat.losses}L)
-                      </span>
-                    </div>
-                    {stat.mostPlayedComp.length > 0 && (
-                      <div className="flex items-center gap-1 mt-1">
-                        {stat.mostPlayedComp.map((agent, agentIndex) => (
-                          <img
-                            key={agentIndex}
-                            src={`https://www.vlr.gg/img/vlr/game/agents/${agent}.png`}
-                            alt={agent.charAt(0).toUpperCase() + agent.slice(1)}
-                            style={{ width: '25px', marginLeft: agentIndex === 0 ? '0' : '8px', display: 'inline-block' }}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                                  {stat.winPercent} ({stat.wins}W-{stat.losses}L)
+                                </span>
+                              </div>
+                              {stat.mostPlayedComp.length > 0 && (
+                                <div className="flex items-center gap-1 mt-1">
+                                  {stat.mostPlayedComp.map((agent, agentIndex) => (
+                                    <img
+                                      key={agentIndex}
+                                      src={`https://www.vlr.gg/img/vlr/game/agents/${agent}.png`}
+                                      alt={agent.charAt(0).toUpperCase() + agent.slice(1)}
+                                      style={{ width: '25px', marginLeft: agentIndex === 0 ? '0' : '8px', display: 'inline-block' }}
+                                    />
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                           )
                         })
-            ) : (
-              <p className="text-xs text-gray-500">No stats available</p>
-            )}
+                      ) : (
+                        <p className="text-xs text-gray-500">No stats available</p>
+                      )}
                     </div>
                   </ScrollArea>
                 </motion.div>
