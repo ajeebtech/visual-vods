@@ -66,7 +66,7 @@ export default async function handler(
 
       const teams: string[] = []
       for (const pattern of teamPatterns) {
-        const teamMatches = [...link.matchAll(pattern)]
+        const teamMatches = Array.from(link.matchAll(pattern))
         teamMatches.forEach(match => {
           const teamName = match[1]?.trim()
           if (teamName && teamName.length > 1 && teams.length < 2) {
