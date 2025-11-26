@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Tooltip } from "@heroui/react"
 import {
     Clock,
-    Settings,
     Search,
     AlignLeft,
     ChevronDown,
@@ -81,6 +80,30 @@ const CurateSessionIcon = ({ className }: { className?: string }) => (
     </svg>
 )
 
+// Meta Icon
+const MetaIcon = ({ className }: { className?: string }) => (
+    <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 256 256"
+        className={className}
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="16"
+    >
+        <line x1="48" y1="184" x2="48" y2="72" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16"/>
+        <line x1="208" y1="72" x2="208" y2="184" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16"/>
+        <line x1="96" y1="128" x2="96" y2="144" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16"/>
+        <line x1="128" y1="120" x2="128" y2="144" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16"/>
+        <line x1="160" y1="112" x2="160" y2="144" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16"/>
+        <rect x="32" y="40" width="192" height="32" rx="8" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16"/>
+        <line x1="128" y1="184" x2="128" y2="216" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16"/>
+        <circle cx="128" cy="232" r="16" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16"/>
+        <line x1="32" y1="184" x2="224" y2="184" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16"/>
+    </svg>
+)
+
 interface Session {
     id: string
     title: string
@@ -94,9 +117,11 @@ interface Session {
 
 interface SidebarProps {
     onLoadSession?: (session: Session) => void
+    onShowMeta?: () => void
+    onLogoClick?: () => void
 }
 
-export default function Sidebar({ onLoadSession }: SidebarProps) {
+export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: SidebarProps) {
     const [isExpanded, setIsExpanded] = useState(false)
     const [isSettingsOpen, setIsSettingsOpen] = useState(false)
     const [username, setUsername] = useState<string>('User Name')
@@ -985,7 +1010,8 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                     <img 
                         src="/logo.png" 
                         alt="Logo" 
-                        className="w-16 h-16 flex-shrink-0 object-contain"
+                        className="w-16 h-16 flex-shrink-0 object-contain cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={onLogoClick}
                     />
                 <AnimatePresence>
                     {isExpanded && (
@@ -1209,9 +1235,9 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                                             {isSearching && (
                                                 <div className="absolute right-3 top-2.5">
                                                     <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
-                                                </div>
+                            </div>
                                             )}
-                                        </div>
+                        </div>
 
                                         {/* Search Results */}
                                         {friendSearchQuery.length >= 2 && (
@@ -1378,6 +1404,38 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                             )}
                         </AnimatePresence>
                     </div>
+
+                    {/* Meta Icon */}
+                    <Tooltip
+                        content="Meta"
+                        placement="right"
+                        classNames={{
+                            content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
+                        }}
+                    >
+                        <button
+                            onClick={() => {
+                                if (onShowMeta) {
+                                    onShowMeta()
+                                }
+                            }}
+                            className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors"
+                        >
+                            <MetaIcon className="w-6 h-6 flex-shrink-0" />
+                        <AnimatePresence>
+                            {isExpanded && (
+                                <motion.span
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="whitespace-nowrap font-medium"
+                                >
+                                        Meta
+                                </motion.span>
+                            )}
+                        </AnimatePresence>
+                    </button>
+                </Tooltip>
 
                     {/* Projects Icon */}
                     <div className="flex flex-col">
@@ -1582,33 +1640,6 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
             {/* Bottom Actions */}
             <div className="p-6 flex flex-col gap-6">
                 <Tooltip
-                    content="Settings"
-                    placement="right"
-                    classNames={{
-                        content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
-                    }}
-                >
-                        <button
-                            onClick={() => setIsSettingsOpen(true)}
-                            className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors"
-                        >
-                        <Settings className="w-6 h-6 flex-shrink-0" />
-                        <AnimatePresence>
-                            {isExpanded && (
-                                <motion.span
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    className="whitespace-nowrap font-medium"
-                                >
-                                    Settings
-                                </motion.span>
-                            )}
-                        </AnimatePresence>
-                    </button>
-                </Tooltip>
-
-                <Tooltip
                     content="Profile"
                     placement="right"
                     classNames={{
@@ -1718,6 +1749,7 @@ export default function Sidebar({ onLoadSession }: SidebarProps) {
                     />
                 )}
             </AnimatePresence>
+
 
             {/* Create Project Modal */}
             <CreateProjectModal

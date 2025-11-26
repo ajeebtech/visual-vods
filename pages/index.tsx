@@ -15,6 +15,7 @@ const Scene = dynamic(() => import('../components/Scene'), {
 //i
 import Sidebar from '@/components/Sidebar'
 import MatchScene3D from '@/components/MatchScene3D'
+import MetaAnalysis from '@/components/MetaAnalysis'
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false)
@@ -39,6 +40,26 @@ export default function Home() {
   const [loadedSessionId, setLoadedSessionId] = useState<string | null>(null)
   // Store session owner info
   const [sessionOwner, setSessionOwner] = useState<{ username: string, avatar_url: string | null, user_id: string } | null>(null)
+  
+  // Meta analysis state
+  const [showMeta, setShowMeta] = useState(false)
+
+  // Handle logo click - reset to search view
+  const handleLogoClick = () => {
+    setShowMeta(false)
+    setMatchesData(null)
+    setHasSubmitted(false)
+    setShowScene(false)
+    setIsLoading(false)
+    // Reset search fields
+    setTeam1('')
+    setTeam2('')
+    setTournament('')
+    setPlayerName('')
+    setTeam1Id(null)
+    setTeam2Id(null)
+    setPlayerId(null)
+  }
   
   const router = useRouter()
   const { user } = useUser()
@@ -504,20 +525,25 @@ export default function Home() {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
       <main className="relative w-full h-screen overflow-hidden bg-gray-100">
-        <Sidebar onLoadSession={handleLoadSession} />
+        <Sidebar 
+          onLoadSession={handleLoadSession} 
+          onShowMeta={() => setShowMeta(true)}
+          onLogoClick={handleLogoClick}
+        />
 
         {/* Search bar - centered initially, moves to bottom after submission */}
-        <motion.div
-          initial={{ top: '50%', bottom: 'auto', y: '-50%' }}
-          animate={
-            hasSubmitted
-              ? { top: 'auto', bottom: '0', y: '0%' }
-              : { top: '50%', bottom: 'auto', y: '-50%' }
-          }
-          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-          className="fixed left-0 right-0 flex flex-col items-center justify-center z-50 pl-20"
-          style={{ paddingBottom: hasSubmitted ? '2rem' : '0' }}
-        >
+        {!showMeta && (
+          <motion.div
+            initial={{ top: '50%', bottom: 'auto', y: '-50%' }}
+            animate={
+              hasSubmitted
+                ? { top: 'auto', bottom: '0', y: '0%' }
+                : { top: '50%', bottom: 'auto', y: '-50%' }
+            }
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            className="fixed left-0 right-0 flex flex-col items-center justify-center z-50 pl-20"
+            style={{ paddingBottom: hasSubmitted ? '2rem' : '0' }}
+          >
           {/* Heading - only visible before submission */}
           <AnimatePresence>
             {!hasSubmitted && (
@@ -622,6 +648,7 @@ export default function Home() {
             </form>
           </div>
         </motion.div>
+        )}
 
         {/* Loading state */}
         <AnimatePresence>
@@ -650,8 +677,11 @@ export default function Home() {
           )}
         </AnimatePresence>
 
+        {/* Meta Analysis - shows when Meta icon is clicked */}
+        {showMeta && <MetaAnalysis onClose={() => setShowMeta(false)} />}
+
         {/* Match Scene 3D - shows when matches are loaded */}
-        {matchesData && matchesData.matches && matchesData.matches.length > 0 && (
+        {!showMeta && matchesData && matchesData.matches && matchesData.matches.length > 0 && (
           <MatchScene3D 
             matches={matchesData.matches}
             team1Name={team1}
