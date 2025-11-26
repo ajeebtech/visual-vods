@@ -1046,7 +1046,7 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
                                     setShowHistory(!showHistory)
                                 }}
                                 className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors"
-                            >
+                    >
                                 <Clock className="w-6 h-6 flex-shrink-0" />
                         <AnimatePresence>
                             {isExpanded && (
@@ -1654,7 +1654,7 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
                                 }
                             }}
                             disabled={!clerkUser}
-                        >
+                >
                             <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 flex-shrink-0 border-2 border-gray-300 relative">
                                 {avatarUrl && clerkUser ? (
                                     <img

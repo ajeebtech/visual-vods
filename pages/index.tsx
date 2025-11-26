@@ -33,6 +33,10 @@ export default function Home() {
   const [team2Id, setTeam2Id] = useState<string | null>(null)
   const [playerId, setPlayerId] = useState<string | null>(null)
   
+  // Store team logos
+  const [team1Logo, setTeam1Logo] = useState<string | null>(null)
+  const [team2Logo, setTeam2Logo] = useState<string | null>(null)
+  
   // Store matches data
   const [matchesData, setMatchesData] = useState<any>(null)
 
@@ -59,6 +63,8 @@ export default function Home() {
     setTeam1Id(null)
     setTeam2Id(null)
     setPlayerId(null)
+    setTeam1Logo(null)
+    setTeam2Logo(null)
   }
   
   const router = useRouter()
@@ -180,10 +186,16 @@ export default function Home() {
     if (session.team1_name) {
       setTeam1(session.team1_name)
       setTeam1Id(session.team1_id || null)
+      if (session.team1_id) {
+        getTeamLogoUrl(session.team1_id).then(logo => setTeam1Logo(logo))
+      }
     }
     if (session.team2_name) {
       setTeam2(session.team2_name)
       setTeam2Id(session.team2_id || null)
+      if (session.team2_id) {
+        getTeamLogoUrl(session.team2_id).then(logo => setTeam2Logo(logo))
+      }
     }
     if (session.tournament) {
       setTournament(session.tournament)
@@ -205,17 +217,29 @@ export default function Home() {
     }
   }
 
-  const handleTeam1Change = (value: string, teamId?: string) => {
+  const handleTeam1Change = (value: string, teamId?: string, logo?: string) => {
     setTeam1(value)
     setTeam1Id(teamId || null)
-    // Don't clear player - allow filtering player matches by teams
+    setTeam1Logo(logo || null)
+    // Clear team2 if it's the same team
+    if (value === team2) {
+      setTeam2('')
+      setTeam2Id(null)
+      setTeam2Logo(null)
+    }
   }
 
-  const handleTeam2Change = (value: string, teamId?: string) => {
+  const handleTeam2Change = (value: string, teamId?: string, logo?: string) => {
     setTeam2(value)
     setTeam2Id(teamId || null)
-    // Don't clear player - allow filtering player matches by teams
+    setTeam2Logo(logo || null)
+    // Clear team1 if it's the same team
+    if (value === team1) {
+      setTeam1('')
+      setTeam1Id(null)
+      setTeam1Logo(null)
     }
+  }
 
   const handlePlayerNameChange = (value: string, id?: string) => {
     setPlayerName(value)
@@ -257,14 +281,41 @@ export default function Home() {
     return match ? match[1] : null
   }
 
+  // Get team logo URL from team ID - fetch from API
+  const getTeamLogoUrl = async (teamId: string): Promise<string | null> => {
+    try {
+      const cacheKey = getCacheKey('vlr:team-logo', teamId)
+      const cached = getCached<string | null>(cacheKey)
+      if (cached !== null) {
+        return cached
+      }
+      
+      const response = await fetch(`/api/vlr-team-logo?teamId=${encodeURIComponent(teamId)}`)
+      if (!response.ok) return null
+      
+      const data = await response.json()
+      const logoUrl = data.logo || null
+      
+      // Cache for 1 hour
+      if (logoUrl) {
+        setCached(cacheKey, logoUrl, 3600)
+      }
+      
+      return logoUrl
+    } catch (error) {
+      console.error('Error fetching team logo:', error)
+      return null
+    }
+  }
+
   // Extract player ID from search result path (e.g., /search/r/player/881/yay -> 881)
   const extractPlayerId = (path: string): string | null => {
     const match = path.match(/\/search\/r\/player\/(\d+)\//)
     return match ? match[1] : null
   }
 
-  // Search functions using VLR.gg API - now returns objects with name and id
-  const searchTeam1 = async (query: string): Promise<Array<{ name: string; id: string }>> => {
+  // Search functions using VLR.gg API - now returns objects with name, id, and logo
+  const searchTeam1 = async (query: string): Promise<Array<{ name: string; id: string; logo?: string }>> => {
     const results = await fetchVLRResults(query)
     if (!results.length) return []
     
@@ -273,7 +324,7 @@ export default function Home() {
     if (teamsIndex === -1) return []
     
     // Get all items after the teams header until the next category or end
-    const teams: Array<{ name: string; id: string }> = []
+    const teams: Array<{ name: string; id: string; logo?: string }> = []
     const seenNames = new Set<string>()
     
     for (let i = teamsIndex + 1; i < results.length; i++) {
@@ -284,7 +335,13 @@ export default function Home() {
       if (item.id && item.id.startsWith('/search/r/team/') && item.value) {
         const teamId = extractTeamId(item.id)
         if (teamId && !seenNames.has(item.value)) {
-          teams.push({ name: item.value, id: teamId })
+          // Fetch logo asynchronously
+          const logo = await getTeamLogoUrl(teamId)
+          teams.push({ 
+            name: item.value, 
+            id: teamId,
+            logo: logo || undefined
+          })
           seenNames.add(item.value)
       }
     }
@@ -293,7 +350,7 @@ export default function Home() {
     return teams
   }
 
-  const searchTeam2 = async (query: string): Promise<Array<{ name: string; id: string }>> => {
+  const searchTeam2 = async (query: string): Promise<Array<{ name: string; id: string; logo?: string }>> => {
     const results = await fetchVLRResults(query)
     if (!results.length) return []
     
@@ -302,7 +359,7 @@ export default function Home() {
     if (teamsIndex === -1) return []
     
     // Get all items after the teams header until the next category or end
-    const teams: Array<{ name: string; id: string }> = []
+    const teams: Array<{ name: string; id: string; logo?: string }> = []
     const seenNames = new Set<string>()
     
     for (let i = teamsIndex + 1; i < results.length; i++) {
@@ -313,7 +370,13 @@ export default function Home() {
       if (item.id && item.id.startsWith('/search/r/team/') && item.value) {
         const teamId = extractTeamId(item.id)
         if (teamId && !seenNames.has(item.value)) {
-          teams.push({ name: item.value, id: teamId })
+          // Fetch logo asynchronously
+          const logo = await getTeamLogoUrl(teamId)
+          teams.push({ 
+            name: item.value, 
+            id: teamId,
+            logo: logo || undefined
+          })
           seenNames.add(item.value)
       }
     }
@@ -583,6 +646,8 @@ export default function Home() {
                   onChange={handleTeam1Change}
                   onSearch={searchTeam1}
                   className="flex-1 min-w-[150px]"
+                  showLogo={true}
+                  selectedLogo={team1Logo}
                 />
                 
                 {/* VS Divider */}
@@ -606,6 +671,8 @@ export default function Home() {
                   onChange={handleTeam2Change}
                   onSearch={searchTeam2}
                   className="flex-1 min-w-[150px]"
+                  showLogo={true}
+                  selectedLogo={team2Logo}
                 />
                 <SearchableSelect
                   placeholder="Tournament (optional)"

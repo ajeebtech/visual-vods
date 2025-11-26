@@ -876,8 +876,8 @@ export default function MatchScene3D({
             enableRotate={true}
             autoRotate={false}
             zoomSpeed={1.2}
-            minDistance={5}
-            maxDistance={40}
+            minDistance={8}
+            maxDistance={25}
             minPolarAngle={Math.PI / 4} // Allow viewing from side
             maxPolarAngle={Math.PI / 1.5}
             minAzimuthAngle={-Infinity} // Allow full horizontal rotation
