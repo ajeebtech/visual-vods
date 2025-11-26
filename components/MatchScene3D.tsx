@@ -1061,7 +1061,7 @@ export default function MatchScene3D({
               {filteredMatches.length} matches {dateFilter !== 'all' ? `(last ${dateFilter}d)` : ''} • {matchesToDisplay.length} visible • {loadedThumbnails.size} thumbnails loaded
             </p>
             <p className="text-xs text-gray-600 mt-1">
-              First 20 matches closer • Older matches further back • Click and drag to pan
+              swipe around to navigate • use the scroll wheel to zoom
             </p>
             {matchesToDisplay.length < filteredMatches.length && (
               <p className="text-xs text-blue-600 mt-1">
