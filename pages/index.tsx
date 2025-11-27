@@ -326,7 +326,7 @@ export default function Home() {
     if (teamsIndex === -1) return []
 
     // Get all items after the teams header until the next category or end
-    const teams: Array<{ name: string; id: string; logo?: string }> = []
+    const teamsToFetch: Array<{ name: string; id: string }> = []
     const seenNames = new Set<string>()
 
     for (let i = teamsIndex + 1; i < results.length; i++) {
@@ -337,19 +337,25 @@ export default function Home() {
       if (item.id && item.id.startsWith('/search/r/team/') && item.value) {
         const teamId = extractTeamId(item.id)
         if (teamId && !seenNames.has(item.value)) {
-          // Fetch logo asynchronously
-          const logo = await getTeamLogoUrl(teamId)
-          teams.push({
+          teamsToFetch.push({
             name: item.value,
-            id: teamId,
-            logo: logo || undefined
+            id: teamId
           })
           seenNames.add(item.value)
         }
       }
     }
 
-    return teams
+    // Fetch logos in parallel
+    const teamsWithLogos = await Promise.all(teamsToFetch.map(async (team) => {
+      const logo = await getTeamLogoUrl(team.id)
+      return {
+        ...team,
+        logo: logo || undefined
+      }
+    }))
+
+    return teamsWithLogos
   }
 
   const searchTeam2 = async (query: string): Promise<Array<{ name: string; id: string; logo?: string }>> => {
@@ -361,7 +367,7 @@ export default function Home() {
     if (teamsIndex === -1) return []
 
     // Get all items after the teams header until the next category or end
-    const teams: Array<{ name: string; id: string; logo?: string }> = []
+    const teamsToFetch: Array<{ name: string; id: string }> = []
     const seenNames = new Set<string>()
 
     for (let i = teamsIndex + 1; i < results.length; i++) {
@@ -372,19 +378,25 @@ export default function Home() {
       if (item.id && item.id.startsWith('/search/r/team/') && item.value) {
         const teamId = extractTeamId(item.id)
         if (teamId && !seenNames.has(item.value)) {
-          // Fetch logo asynchronously
-          const logo = await getTeamLogoUrl(teamId)
-          teams.push({
+          teamsToFetch.push({
             name: item.value,
-            id: teamId,
-            logo: logo || undefined
+            id: teamId
           })
           seenNames.add(item.value)
         }
       }
     }
 
-    return teams
+    // Fetch logos in parallel
+    const teamsWithLogos = await Promise.all(teamsToFetch.map(async (team) => {
+      const logo = await getTeamLogoUrl(team.id)
+      return {
+        ...team,
+        logo: logo || undefined
+      }
+    }))
+
+    return teamsWithLogos
   }
 
   const searchTournaments = async (query: string): Promise<string[]> => {
