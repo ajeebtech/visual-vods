@@ -466,13 +466,19 @@ export default function Home() {
       if (playerName && playerId) {
         let queryParams = `playerId=${playerId}&playerName=${encodeURIComponent(playerName)}&limit=${effectiveLimit}`
 
-        if (team1 && team2) {
-          queryParams += `&team1Name=${encodeURIComponent(team1)}&team2Name=${encodeURIComponent(team2)}`
+        if (team1) {
+          queryParams += `&team1Name=${encodeURIComponent(team1)}`
+        }
+        if (team2) {
+          queryParams += `&team2Name=${encodeURIComponent(team2)}`
         }
 
-        const cacheKey = team1 && team2
-          ? getCacheKey('vlr:player-matches', playerId, playerName.toLowerCase(), team1.toLowerCase(), team2.toLowerCase(), limitKey)
-          : getCacheKey('vlr:player-matches', playerId, playerName.toLowerCase(), limitKey)
+        const cacheKeyParts = ['vlr:player-matches', playerId, playerName.toLowerCase()]
+        if (team1) cacheKeyParts.push(team1.toLowerCase())
+        if (team2) cacheKeyParts.push(team2.toLowerCase())
+        cacheKeyParts.push(limitKey)
+
+        const cacheKey = getCacheKey(...cacheKeyParts)
 
         const cached = getCached<any>(cacheKey)
         if (cached) {
@@ -711,6 +717,7 @@ export default function Home() {
                     onChange={handlePlayerNameChange}
                     onSearch={searchPlayerName}
                     className="flex-1 min-w-[150px]"
+                    disabled={true}
                   />
                 </div>
 
