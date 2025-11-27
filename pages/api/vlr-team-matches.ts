@@ -45,7 +45,7 @@ export default async function handler(
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const { teamId, teamName, team2Id, team2Name } = req.query
+  const { teamId, teamName, team2Id, team2Name, limit } = req.query
 
   if (!teamId || typeof teamId !== 'string') {
     return res.status(400).json({ error: 'Missing or invalid teamId parameter' })
@@ -53,6 +53,18 @@ export default async function handler(
 
   if (!teamName || typeof teamName !== 'string') {
     return res.status(400).json({ error: 'Missing or invalid teamName parameter' })
+  }
+
+  const DEFAULT_LIMIT = 50
+  const MIN_LIMIT = 30
+  const MAX_LIMIT = 150
+
+  let matchLimit = DEFAULT_LIMIT
+  if (typeof limit === 'string') {
+    const parsed = parseInt(limit, 10)
+    if (!Number.isNaN(parsed)) {
+      matchLimit = Math.max(MIN_LIMIT, Math.min(parsed, MAX_LIMIT))
+    }
   }
 
   // If team2 is provided, we'll fetch from team2's matches page and filter
@@ -67,7 +79,8 @@ export default async function handler(
     teamId,
     teamName.toLowerCase(),
     hasTeam2 ? team2Id : 'none',
-    hasTeam2 ? team2Name.toLowerCase() : 'none'
+    hasTeam2 ? team2Name.toLowerCase() : 'none',
+    `limit:${matchLimit}`
   )
 
   try {
@@ -252,8 +265,8 @@ export default async function handler(
           hasMorePages = morePages && matchLinks.length > 0
           currentPage++
 
-          // If we're filtering by team2, stop if we have enough matches (50)
-          if (hasTeam2 && allMatchLinks.length >= 50) {
+          // Stop early if we've gathered enough matches
+          if (allMatchLinks.length >= matchLimit) {
             break
           }
         }
@@ -583,8 +596,8 @@ export default async function handler(
           return vodLinks
         }
 
-        // Fetch each match page (limit to first 50 matches) - use unique links
-        const matchesToFetch = allMatchLinks.slice(0, 50)
+        // Fetch each match page (respect requested match limit) - use unique links
+        const matchesToFetch = allMatchLinks.slice(0, matchLimit)
         const matchData: MatchData[] = []
 
         for (const matchLink of matchesToFetch) {
@@ -653,6 +666,7 @@ export default async function handler(
             matchId: link.matchId
           })),
           totalMatches: allMatchLinks.length,
+          requestedLimit: matchLimit,
           matches: matchData.map(match => ({
             href: match.href,
             matchId: match.matchId,

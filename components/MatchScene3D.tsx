@@ -10,13 +10,6 @@ import * as THREE from 'three'
 import { useUser, useSession } from '@clerk/nextjs'
 import NotesPanel from '@/components/NotesPanel'
 import { getCached, setCached, getCacheKey } from '@/lib/local-cache'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
 interface VODLink {
@@ -51,6 +44,8 @@ interface Match {
   matchInfo?: MatchInfo
 }
 
+const MATCH_LIMIT_OPTIONS = [50, 75, 100, 150] as const
+
 interface MatchScene3DProps {
   matches: Match[]
   team1Name?: string
@@ -62,6 +57,9 @@ interface MatchScene3DProps {
   initialSessionId?: string | null
   onAllThumbnailsLoaded?: () => void
   sessionOwner?: { username: string, avatar_url: string | null, user_id: string } | null
+  matchLimit: number
+  onMatchLimitChange?: (limit: number) => void
+  isFetchingMatches?: boolean
 }
 
 // Helper to get YouTube thumbnail from video ID or URL
@@ -445,7 +443,10 @@ export default function MatchScene3D({
   playerName,
   initialSessionId,
   onAllThumbnailsLoaded,
-  sessionOwner
+  sessionOwner,
+  matchLimit,
+  onMatchLimitChange,
+  isFetchingMatches
 }: MatchScene3DProps) {
   const { user } = useUser()
   const { session: clerkSession } = useSession()
@@ -453,7 +454,6 @@ export default function MatchScene3D({
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null)
   const [selectedVOD, setSelectedVOD] = useState<VODLink | null>(null)
   const [loadedThumbnails, setLoadedThumbnails] = useState<Set<number>>(new Set())
-  const [dateFilter, setDateFilter] = useState<'30' | '50' | '90' | 'all'>('all')
   const [visibleMatches, setVisibleMatches] = useState<number>(0)
   const [sessionId, setSessionId] = useState<string | null>(initialSessionId || null)
   const [isSavingSession, setIsSavingSession] = useState(false)
@@ -633,29 +633,15 @@ export default function MatchScene3D({
 
   // Filter matches by date range and sort by date (newest first)
   const filteredMatches = useMemo(() => {
-    let matches = youtubeMatches
-
-    // Apply date filter if not 'all'
-    if (dateFilter !== 'all') {
-      const days = parseInt(dateFilter)
-      const cutoffDate = new Date()
-      cutoffDate.setDate(cutoffDate.getDate() - days)
-
-      matches = matches.filter(match => {
-        if (!match.date) return true // Include matches without dates
-        const matchDate = new Date(match.date)
-        return matchDate >= cutoffDate
-      })
-    }
-
+    const matchesToSort = [...youtubeMatches]
     // Sort by date: newest first (latest matches at the beginning)
-    return matches.sort((a, b) => {
+    return matchesToSort.sort((a, b) => {
       if (!a.date && !b.date) return 0
       if (!a.date) return 1 // Matches without dates go to the end
       if (!b.date) return -1
       return new Date(b.date).getTime() - new Date(a.date).getTime()
     })
-  }, [youtubeMatches, dateFilter])
+  }, [youtubeMatches])
 
   // Progressive rendering: show matches one by one
   useEffect(() => {
@@ -679,7 +665,7 @@ export default function MatchScene3D({
     }, 100) // Show one match every 100ms
 
     return () => clearInterval(interval)
-  }, [filteredMatches.length, dateFilter])
+  }, [filteredMatches.length])
 
   // Get matches to display (progressive)
   const matchesToDisplay = useMemo(() => {
@@ -929,17 +915,35 @@ export default function MatchScene3D({
 
       {/* Date filter dropdown and team stats - top right */}
       <div className="fixed top-4 right-4 z-40 flex flex-col gap-3 items-end">
-        <Select value={dateFilter} onValueChange={(value: '30' | '50' | '90' | 'all') => setDateFilter(value)}>
-          <SelectTrigger className="w-32 bg-white/90 backdrop-blur-sm text-gray-900">
-            <SelectValue placeholder="Filter by date" />
-          </SelectTrigger>
-          <SelectContent className="bg-white text-gray-900">
-            <SelectItem value="all" className="text-gray-900 focus:text-gray-900 focus:bg-gray-100">All matches</SelectItem>
-            <SelectItem value="30" className="text-gray-900 focus:text-gray-900 focus:bg-gray-100">Last 30 days</SelectItem>
-            <SelectItem value="50" className="text-gray-900 focus:text-gray-900 focus:bg-gray-100">Last 50 days</SelectItem>
-            <SelectItem value="90" className="text-gray-900 focus:text-gray-900 focus:bg-gray-100">Last 90 days</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg px-4 py-3 w-[260px]">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Matches to fetch</p>
+            <span className="text-xs text-gray-600">limit {matchLimit}</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {MATCH_LIMIT_OPTIONS.map(option => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => onMatchLimitChange?.(option)}
+                disabled={!onMatchLimitChange || option === matchLimit || isFetchingMatches}
+                className={`px-3 py-1 rounded-full text-xs font-semibold transition ${
+                  option === matchLimit
+                    ? 'bg-gray-900 text-white shadow-md'
+                    : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                } ${(!onMatchLimitChange || isFetchingMatches) ? 'cursor-not-allowed opacity-60' : ''}`}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+          <p className="text-[11px] text-gray-500 mt-2">
+            Showing up to {matchLimit} matches from the current search.
+          </p>
+          {isFetchingMatches && (
+            <p className="text-[11px] text-gray-600 mt-1">Fetching matches…</p>
+          )}
+        </div>
 
         {/* Team Map Stats */}
         {team1Id && team1Name && (
@@ -1058,7 +1062,7 @@ export default function MatchScene3D({
               </div>
             )}
             <p className="text-sm font-medium text-gray-900">
-              {filteredMatches.length} matches {dateFilter !== 'all' ? `(last ${dateFilter}d)` : ''} • {matchesToDisplay.length} visible • {loadedThumbnails.size} thumbnails loaded
+              {filteredMatches.length} matches (limit {matchLimit}) • {matchesToDisplay.length} visible • {loadedThumbnails.size} thumbnails loaded
             </p>
             <p className="text-xs text-gray-600 mt-1">
               swipe around to navigate • use the scroll wheel to zoom

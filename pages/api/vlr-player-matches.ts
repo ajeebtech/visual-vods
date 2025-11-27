@@ -38,7 +38,7 @@ export default async function handler(
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const { playerId, playerName, team1Name, team2Name } = req.query
+  const { playerId, playerName, team1Name, team2Name, limit } = req.query
 
   if (!playerId || typeof playerId !== 'string') {
     return res.status(400).json({ error: 'Missing or invalid playerId parameter' })
@@ -48,14 +48,27 @@ export default async function handler(
     return res.status(400).json({ error: 'Missing or invalid playerName parameter' })
   }
 
+  const DEFAULT_LIMIT = 50
+  const MIN_LIMIT = 30
+  const MAX_LIMIT = 150
+
+  let matchLimit = DEFAULT_LIMIT
+  if (typeof limit === 'string') {
+    const parsed = parseInt(limit, 10)
+    if (!Number.isNaN(parsed)) {
+      matchLimit = Math.max(MIN_LIMIT, Math.min(parsed, MAX_LIMIT))
+    }
+  }
+
   const filterByTeams = team1Name && typeof team1Name === 'string' && team2Name && typeof team2Name === 'string'
 
   // Create cache key (include team filters if provided)
   // Skip cache if _t parameter is present (for debugging)
   const bypassCache = req.query._t !== undefined
+  const limitKey = `limit:${matchLimit}`
   const cacheKey = filterByTeams
-    ? getCacheKey('vlr:player-matches', playerId, playerName.toLowerCase(), (team1Name as string).toLowerCase(), (team2Name as string).toLowerCase())
-    : getCacheKey('vlr:player-matches', playerId, playerName.toLowerCase())
+    ? getCacheKey('vlr:player-matches', playerId, playerName.toLowerCase(), (team1Name as string).toLowerCase(), (team2Name as string).toLowerCase(), limitKey)
+    : getCacheKey('vlr:player-matches', playerId, playerName.toLowerCase(), limitKey)
 
   try {
     // If bypassing cache, fetch directly
@@ -209,7 +222,7 @@ export default async function handler(
         // Convert to matchElements format
         const matchElements: Array<{ href: string; fullUrl: string; matchId?: string; matchTeam1Name: string; matchTeam2Name: string; tournament?: string; score: { team1: number; team2: number; winner: 1 | 2 | null } }> = []
         
-        for (const link of filteredMatchLinks.slice(0, 50)) {
+        for (const link of filteredMatchLinks.slice(0, matchLimit)) {
           // Extract team names from URL
           const urlMatch = link.href.match(/\/(\d+)\/([^-]+)-vs-([^-]+)/)
           let matchTeam1Name = 'Unknown'
@@ -296,7 +309,7 @@ export default async function handler(
           
           if (aggressiveMatches.length > 0) {
             console.log(`Found ${aggressiveMatches.length} matches with aggressive search`)
-            finalMatchElements = aggressiveMatches.slice(0, 50)
+            finalMatchElements = aggressiveMatches.slice(0, matchLimit)
           }
         }
         
@@ -382,7 +395,8 @@ export default async function handler(
           totalMatches: matches.length,
           fetchedMatches: matches.length,
           matchesWithVODs: matches.filter(m => m.vodLinks && m.vodLinks.length > 0).length,
-          latestMatch: matches.length > 0 ? matches[0] : null
+          latestMatch: matches.length > 0 ? matches[0] : null,
+          requestedLimit: matchLimit
         }
       }
     
