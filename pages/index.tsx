@@ -801,6 +801,15 @@ export default function Home() {
             <Scene />
           </Suspense>
         )}
+        {/* Twitter Link */}
+        <a
+          href="https://x.com/ajeebtech"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="fixed bottom-4 left-1/2 -translate-x-1/2 text-xs text-gray-400 z-50"
+        >
+          made by <span className="font-extrabold inline-block hover:scale-110 hover:text-black transition-all duration-300 origin-bottom">ajeebtech</span>
+        </a>
       </main>
     </>
   )
