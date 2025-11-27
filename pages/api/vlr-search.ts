@@ -21,30 +21,35 @@ export default async function handler(
     const data = await getCached(
       cacheKey,
       async () => {
-    const response = await fetch(
-      `https://www.vlr.gg/search/auto/?term=${encodeURIComponent(term)}`,
-      {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Accept': 'application/json',
-        },
-      }
-    )
+        const response = await fetch(
+          `https://www.vlr.gg/search/auto/?term=${encodeURIComponent(term)}`,
+          {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              'Accept': 'application/json',
+            },
+          }
+        )
 
-    if (!response.ok) {
+        if (!response.ok) {
           throw new Error('Failed to fetch from VLR.gg')
-    }
+        }
 
         return await response.json()
       },
-      1800 // 30 minutes TTL
+      86400 // 24 hours TTL (increased from 30 mins)
     )
-    
+
     // Set CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*')
     res.setHeader('Access-Control-Allow-Methods', 'GET')
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
-    
+
+    // Add Cache-Control header for Vercel Edge Caching
+    // s-maxage=86400: Cache in Vercel Edge Network for 24 hours
+    // stale-while-revalidate=3600: Serve stale content for up to 1 hour while revalidating
+    res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=3600')
+
     return res.status(200).json(data)
   } catch (error: any) {
     console.error('Error proxying VLR.gg request:', error)

@@ -15,6 +15,7 @@ import {
     UserPlus,
     UserCheck,
     UserX,
+    UserMinus,
     Users,
     Plus,
     Share2
@@ -92,15 +93,15 @@ const MetaIcon = ({ className }: { className?: string }) => (
         strokeLinejoin="round"
         strokeWidth="16"
     >
-        <line x1="48" y1="184" x2="48" y2="72" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16"/>
-        <line x1="208" y1="72" x2="208" y2="184" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16"/>
-        <line x1="96" y1="128" x2="96" y2="144" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16"/>
-        <line x1="128" y1="120" x2="128" y2="144" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16"/>
-        <line x1="160" y1="112" x2="160" y2="144" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16"/>
-        <rect x="32" y="40" width="192" height="32" rx="8" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16"/>
-        <line x1="128" y1="184" x2="128" y2="216" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16"/>
-        <circle cx="128" cy="232" r="16" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16"/>
-        <line x1="32" y1="184" x2="224" y2="184" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16"/>
+        <line x1="48" y1="184" x2="48" y2="72" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16" />
+        <line x1="208" y1="72" x2="208" y2="184" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16" />
+        <line x1="96" y1="128" x2="96" y2="144" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16" />
+        <line x1="128" y1="120" x2="128" y2="144" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16" />
+        <line x1="160" y1="112" x2="160" y2="144" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16" />
+        <rect x="32" y="40" width="192" height="32" rx="8" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16" />
+        <line x1="128" y1="184" x2="128" y2="216" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16" />
+        <circle cx="128" cy="232" r="16" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16" />
+        <line x1="32" y1="184" x2="224" y2="184" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16" />
     </svg>
 )
 
@@ -207,7 +208,7 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
                     const token = await clerkSession.getToken({ template: 'supabase' })
                     if (token) {
                         const cacheKey = getCacheKey('profile', clerkUser.id)
-                        
+
                         // Try cache first
                         const cached = getCached<{ data: { username: string | null, avatar_url: string | null } }>(cacheKey)
                         if (cached && cached.data) {
@@ -215,65 +216,65 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
                             savedAvatar = cached.data.avatar_url || null
                             console.log('✅ Profile fetched from cache:', { savedUsername, savedAvatar })
                         } else {
-                        const response = await fetch('/api/profile', {
-                            method: 'GET',
-                            headers: {
-                                'Authorization': `Bearer ${token}`
-                            }
-                        })
+                            const response = await fetch('/api/profile', {
+                                method: 'GET',
+                                headers: {
+                                    'Authorization': `Bearer ${token}`
+                                }
+                            })
 
-                        if (response.ok) {
-                            const result = await response.json()
+                            if (response.ok) {
+                                const result = await response.json()
                                 // Cache the result
                                 setCached(cacheKey, result, 300) // 5 minutes
-                                
-                            if (result.data) {
-                                savedUsername = result.data.username || null
-                                savedAvatar = result.data.avatar_url || null
-                                console.log('✅ Profile fetched from API:', { savedUsername, savedAvatar })
-                            } else {
-                                // Profile doesn't exist - create it automatically
-                                console.log('📝 Creating new profile for user:', clerkUser.id)
-                                const createResponse = await fetch('/api/profile', {
-                                    method: 'PUT',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'Authorization': `Bearer ${token}`
-                                    },
-                                    body: JSON.stringify({
-                                        username: clerkUser.fullName || clerkUser.firstName || null,
-                                        avatar_url: clerkUser.imageUrl || null
-                                    })
-                                })
 
-                                if (createResponse.ok) {
-                                    console.log('✅ Profile created successfully')
+                                if (result.data) {
+                                    savedUsername = result.data.username || null
+                                    savedAvatar = result.data.avatar_url || null
+                                    console.log('✅ Profile fetched from API:', { savedUsername, savedAvatar })
+                                } else {
+                                    // Profile doesn't exist - create it automatically
+                                    console.log('📝 Creating new profile for user:', clerkUser.id)
+                                    const createResponse = await fetch('/api/profile', {
+                                        method: 'PUT',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'Authorization': `Bearer ${token}`
+                                        },
+                                        body: JSON.stringify({
+                                            username: clerkUser.fullName || clerkUser.firstName || null,
+                                            avatar_url: clerkUser.imageUrl || null
+                                        })
+                                    })
+
+                                    if (createResponse.ok) {
+                                        console.log('✅ Profile created successfully')
                                         // Invalidate cache
                                         invalidateCache(getCacheKey('profile', clerkUser.id))
-                                    // Fetch the newly created profile
-                                    const fetchResponse = await fetch('/api/profile', {
-                                        method: 'GET',
-                                        headers: {
-                                            'Authorization': `Bearer ${token}`
-                                        }
-                                    })
-                                    if (fetchResponse.ok) {
-                                        const fetchResult = await fetchResponse.json()
+                                        // Fetch the newly created profile
+                                        const fetchResponse = await fetch('/api/profile', {
+                                            method: 'GET',
+                                            headers: {
+                                                'Authorization': `Bearer ${token}`
+                                            }
+                                        })
+                                        if (fetchResponse.ok) {
+                                            const fetchResult = await fetchResponse.json()
                                             // Cache the result
                                             setCached(getCacheKey('profile', clerkUser.id), fetchResult, 300)
-                                        if (fetchResult.data) {
-                                            savedUsername = fetchResult.data.username || null
-                                            savedAvatar = fetchResult.data.avatar_url || null
+                                            if (fetchResult.data) {
+                                                savedUsername = fetchResult.data.username || null
+                                                savedAvatar = fetchResult.data.avatar_url || null
+                                            }
                                         }
+                                    } else {
+                                        const createError = await createResponse.json()
+                                        console.warn('Could not create profile:', createError)
                                     }
-                                } else {
-                                    const createError = await createResponse.json()
-                                    console.warn('Could not create profile:', createError)
                                 }
-                            }
-                        } else {
-                            const error = await response.json()
-                            console.warn('Could not fetch profile:', error)
+                            } else {
+                                const error = await response.json()
+                                console.warn('Could not fetch profile:', error)
                             }
                         }
                     }
@@ -405,7 +406,7 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
             }
 
             const cacheKey = getCacheKey('projects', clerkUser.id)
-            
+
             // Try cache first
             const cached = getCached<{ projects: Array<{ id: string, name: string, description: string | null, created_at: string }> }>(cacheKey)
             if (cached) {
@@ -455,7 +456,7 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
             const offset = reset ? 0 : sessionsOffset
             const limit = 5
             const cacheKey = getCacheKey('sessions', clerkUser.id, limit, offset)
-            
+
             // Try cache first (only for first page)
             if (reset) {
                 const cached = getCached<{ sessions: Session[], hasMore: boolean, total: number }>(cacheKey)
@@ -484,7 +485,7 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
                 if (reset) {
                     setCached(cacheKey, data, 60) // 1 minute
                 }
-                
+
                 if (reset) {
                     setSessions(data.sessions || [])
                     setSessionsOffset(limit)
@@ -545,12 +546,12 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
         } else {
             const query = projectSearchQuery.toLowerCase().trim()
             // Filter projects
-            const filtered = projects.filter(project => 
+            const filtered = projects.filter(project =>
                 project.name.toLowerCase().includes(query) ||
                 (project.description && project.description.toLowerCase().includes(query))
             )
             setFilteredProjects(filtered)
-            
+
             // Filter sessions
             const filteredSessions = sessions.filter(session =>
                 (session.title || 'Untitled Session').toLowerCase().includes(query) ||
@@ -571,12 +572,12 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
         } else {
             const query = findSearchQuery.toLowerCase().trim()
             // Filter projects
-            const filtered = projects.filter(project => 
+            const filtered = projects.filter(project =>
                 project.name.toLowerCase().includes(query) ||
                 (project.description && project.description.toLowerCase().includes(query))
             )
             setFilteredProjectsForFind(filtered)
-            
+
             // Filter sessions
             const filteredSessions = sessions.filter(session =>
                 (session.title || 'Untitled Session').toLowerCase().includes(query) ||
@@ -673,7 +674,7 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
             }
 
             const cacheKey = getCacheKey('friends:search', clerkUser.id, query.toLowerCase())
-            
+
             // Try cache first
             const cached = getCached<{ users: Array<{ id: string, username: string, avatar_url: string | null }> }>(cacheKey)
             if (cached) {
@@ -718,14 +719,16 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
             if (!token) return
 
             const cacheKey = getCacheKey('friends:requests', clerkUser.id, 'pending')
-            
+
             // Try cache first
-            const cached = getCached<{ requests: Array<{
-                id: string
-                status: string
-                isRequester: boolean
-                friend: { id: string, username: string, avatar_url: string | null }
-            }> }>(cacheKey)
+            const cached = getCached<{
+                requests: Array<{
+                    id: string
+                    status: string
+                    isRequester: boolean
+                    friend: { id: string, username: string, avatar_url: string | null }
+                }>
+            }>(cacheKey)
             if (cached) {
                 setFriendRequests(cached.requests || [])
                 setIsLoadingRequests(false)
@@ -796,13 +799,15 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
 
             const offset = reset ? 0 : friendsOffset
             const cacheKey = getCacheKey('friends:list', clerkUser.id, 20, offset)
-            
+
             // Try cache first (only for first page)
             if (reset) {
-                const cached = getCached<{ friends: Array<{
-                    id: string
-                    friend: { id: string, username: string, avatar_url: string | null }
-                }>, hasMore: boolean }>(cacheKey)
+                const cached = getCached<{
+                    friends: Array<{
+                        id: string
+                        friend: { id: string, username: string, avatar_url: string | null }
+                    }>, hasMore: boolean
+                }>(cacheKey)
                 if (cached) {
                     setFriendsList(cached.friends || [])
                     setFriendsOffset(20)
@@ -891,6 +896,43 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
         } catch (error) {
             console.error('Error responding to friend request:', error)
             alert('Failed to respond to friend request')
+        }
+    }
+
+    const removeFriend = async (friendshipId: string) => {
+        if (!clerkSession) return
+
+        if (!confirm('Are you sure you want to remove this friend?')) return
+
+        try {
+            const token = await clerkSession.getToken({ template: 'supabase' })
+            if (!token) return
+
+            const response = await fetch(`/api/friends?action=remove&request_id=${friendshipId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+
+            if (response.ok) {
+                // Invalidate cache
+                if (clerkUser) {
+                    invalidateCache(getCacheKey('friends:requests', clerkUser.id, '*'))
+                    invalidateCache(getCacheKey('friends:list', clerkUser.id, '*'))
+                }
+                await fetchFriendsList(true)
+                // Also refresh search results to update button state
+                if (friendSearchQuery) {
+                    searchUsers(friendSearchQuery)
+                }
+            } else {
+                const error = await response.json()
+                alert(error.error || 'Failed to remove friend')
+            }
+        } catch (error) {
+            console.error('Error removing friend:', error)
+            alert('Failed to remove friend')
         }
     }
 
@@ -998,47 +1040,47 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
 
     return (
         <>
-        <motion.div
-            ref={sidebarRef}
-            initial={{ width: '80px' }}
-            animate={{ width: isExpanded ? '400px' : '80px' }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className="fixed left-0 top-0 h-full bg-white/80 backdrop-blur-xl border-r border-gray-200 z-[100] flex flex-col overflow-hidden"
-        >
-            {/* Top Logo Area */}
-            <div className="p-6 flex items-center gap-4">
-                    <img 
-                        src="/logo.png" 
-                        alt="Logo" 
+            <motion.div
+                ref={sidebarRef}
+                initial={{ width: '80px' }}
+                animate={{ width: isExpanded ? '400px' : '80px' }}
+                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                className="fixed left-0 top-0 h-full bg-white/80 backdrop-blur-xl border-r border-gray-200 z-[100] flex flex-col overflow-hidden"
+            >
+                {/* Top Logo Area */}
+                <div className="p-6 flex items-center gap-4">
+                    <img
+                        src="/logo.png"
+                        alt="Logo"
                         className="w-16 h-16 flex-shrink-0 object-contain cursor-pointer hover:opacity-80 transition-opacity"
                         onClick={onLogoClick}
                     />
-                <AnimatePresence>
-                    {isExpanded && (
-                        <motion.h1
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -20 }}
-                            className="text-2xl font-bold text-black whitespace-nowrap"
-                        >
+                    <AnimatePresence>
+                        {isExpanded && (
+                            <motion.h1
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                className="text-2xl font-bold text-black whitespace-nowrap"
+                            >
                                 my sessions
-                        </motion.h1>
-                    )}
-                </AnimatePresence>
-            </div>
+                            </motion.h1>
+                        )}
+                    </AnimatePresence>
+                </div>
 
-            {/* Navigation Items */}
-            <div className="flex-1 flex flex-col gap-8 px-6 mt-8">
+                {/* Navigation Items */}
+                <div className="flex-1 flex flex-col gap-8 px-6 mt-8">
                     {/* History Icon */}
                     <div className="flex flex-col">
-                <Tooltip
+                        <Tooltip
                             content="Session history"
-                    placement="right"
-                    classNames={{
-                        content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
-                    }}
-                >
-                    <button
+                            placement="right"
+                            classNames={{
+                                content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
+                            }}
+                        >
+                            <button
                                 onClick={() => {
                                     if (!isExpanded) {
                                         setIsExpanded(true)
@@ -1046,14 +1088,14 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
                                     setShowHistory(!showHistory)
                                 }}
                                 className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors"
-                    >
+                            >
                                 <Clock className="w-6 h-6 flex-shrink-0" />
-                        <AnimatePresence>
-                            {isExpanded && (
+                                <AnimatePresence>
+                                    {isExpanded && (
                                         <motion.div
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            exit={{ opacity: 0 }}
                                             className="flex items-center justify-between flex-1"
                                         >
                                             <span className="whitespace-nowrap font-medium">History</span>
@@ -1061,10 +1103,10 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
                                                 className={`w-4 h-4 transition-transform ${showHistory ? 'rotate-180' : ''}`}
                                             />
                                         </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </button>
-                </Tooltip>
+                                    )}
+                                </AnimatePresence>
+                            </button>
+                        </Tooltip>
 
                         {/* History List */}
                         <AnimatePresence>
@@ -1091,77 +1133,77 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
                                     ) : (
                                         <>
                                             {sessions.map((session) => (
-                                            <div
-                                                key={session.id}
-                                                className="w-full p-2 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200 group"
-                                            >
-                                                {editingSessionId === session.id ? (
-                                                    // Edit mode
-                                                    <div className="flex items-center gap-2">
-                                                        <input
-                                                            type="text"
-                                                            value={editingTitle}
-                                                            onChange={(e) => setEditingTitle(e.target.value)}
-                                                            onKeyDown={(e) => handleKeyDown(e, session)}
-                                                            onClick={(e) => e.stopPropagation()}
-                                                            className="flex-1 text-sm font-medium text-gray-900 px-2 py-1 border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                            autoFocus
-                                                        />
-                                                        <button
-                                                            onClick={(e) => handleSaveEdit(session, e)}
-                                                            className="p-1 text-green-600 hover:text-green-700 transition-colors"
-                                                            title="Save"
-                                                        >
-                                                            <Check className="w-4 h-4" />
-                                                        </button>
-                                                        <button
-                                                            onClick={(e) => handleCancelEdit(e)}
-                                                            className="p-1 text-red-600 hover:text-red-700 transition-colors"
-                                                            title="Cancel"
-                                                        >
-                                                            <X className="w-4 h-4" />
-                                                        </button>
-                                                    </div>
-                                                ) : (
-                                                    // View mode
-                                                    <div
-                                                        onClick={() => handleLoadSession(session)}
-                                                        className="cursor-pointer"
-                                                    >
-                                                        <div className="flex items-start justify-between gap-2">
-                                                            <div className="flex-1 min-w-0">
-                                                                <p className="text-sm font-medium text-gray-900 truncate">
-                                                                    {session.title || 'Untitled Session'}
-                                                                </p>
-                                                                <p className="text-xs text-gray-500 mt-1">
-                                                                    {formatDate(session.created_at)}
-                                                                </p>
-                                                                {session.matches_data && Array.isArray(session.matches_data) && (
-                                                                    <p className="text-xs text-gray-400 mt-1">
-                                                                        {session.matches_data.length} matches
-                                                                    </p>
-                                                                )}
-                                                            </div>
-                                                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                                                                <button
-                                                                    onClick={(e) => handleShareSession(session, e)}
-                                                                    className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
-                                                                    title="Share session"
-                                                                >
-                                                                    <Share2 className="w-3 h-3" />
-                                                                </button>
+                                                <div
+                                                    key={session.id}
+                                                    className="w-full p-2 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200 group"
+                                                >
+                                                    {editingSessionId === session.id ? (
+                                                        // Edit mode
+                                                        <div className="flex items-center gap-2">
+                                                            <input
+                                                                type="text"
+                                                                value={editingTitle}
+                                                                onChange={(e) => setEditingTitle(e.target.value)}
+                                                                onKeyDown={(e) => handleKeyDown(e, session)}
+                                                                onClick={(e) => e.stopPropagation()}
+                                                                className="flex-1 text-sm font-medium text-gray-900 px-2 py-1 border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                                autoFocus
+                                                            />
                                                             <button
-                                                                onClick={(e) => handleStartEdit(session, e)}
-                                                                    className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
-                                                                title="Edit session name"
+                                                                onClick={(e) => handleSaveEdit(session, e)}
+                                                                className="p-1 text-green-600 hover:text-green-700 transition-colors"
+                                                                title="Save"
                                                             >
-                                                                <Edit2 className="w-3 h-3" />
+                                                                <Check className="w-4 h-4" />
                                                             </button>
+                                                            <button
+                                                                onClick={(e) => handleCancelEdit(e)}
+                                                                className="p-1 text-red-600 hover:text-red-700 transition-colors"
+                                                                title="Cancel"
+                                                            >
+                                                                <X className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        // View mode
+                                                        <div
+                                                            onClick={() => handleLoadSession(session)}
+                                                            className="cursor-pointer"
+                                                        >
+                                                            <div className="flex items-start justify-between gap-2">
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="text-sm font-medium text-gray-900 truncate">
+                                                                        {session.title || 'Untitled Session'}
+                                                                    </p>
+                                                                    <p className="text-xs text-gray-500 mt-1">
+                                                                        {formatDate(session.created_at)}
+                                                                    </p>
+                                                                    {session.matches_data && Array.isArray(session.matches_data) && (
+                                                                        <p className="text-xs text-gray-400 mt-1">
+                                                                            {session.matches_data.length} matches
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                                                    <button
+                                                                        onClick={(e) => handleShareSession(session, e)}
+                                                                        className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                                                        title="Share session"
+                                                                    >
+                                                                        <Share2 className="w-3 h-3" />
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={(e) => handleStartEdit(session, e)}
+                                                                        className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                                                                        title="Edit session name"
+                                                                    >
+                                                                        <Edit2 className="w-3 h-3" />
+                                                                    </button>
+                                                                </div>
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                )}
-                                            </div>
+                                                    )}
+                                                </div>
                                             ))}
                                             {isLoadingSessions && sessions.length > 0 && (
                                                 <div className="flex justify-center py-2">
@@ -1177,13 +1219,13 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
 
                     {/* Friends Icon */}
                     <div className="flex flex-col">
-                <Tooltip
+                        <Tooltip
                             content="Friends"
-                    placement="right"
-                    classNames={{
-                        content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
-                    }}
-                >
+                            placement="right"
+                            classNames={{
+                                content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
+                            }}
+                        >
                             <button
                                 onClick={() => {
                                     if (!isExpanded) {
@@ -1194,12 +1236,12 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
                                 className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors"
                             >
                                 <Users className="w-6 h-6 flex-shrink-0" />
-                        <AnimatePresence>
-                            {isExpanded && (
+                                <AnimatePresence>
+                                    {isExpanded && (
                                         <motion.div
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            exit={{ opacity: 0 }}
                                             className="flex items-center justify-between flex-1"
                                         >
                                             <span className="whitespace-nowrap font-medium">Friends</span>
@@ -1207,10 +1249,10 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
                                                 className={`w-4 h-4 transition-transform ${showFriends ? 'rotate-180' : ''}`}
                                             />
                                         </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </button>
-                </Tooltip>
+                                    )}
+                                </AnimatePresence>
+                            </button>
+                        </Tooltip>
 
                         {/* Friends Section */}
                         <AnimatePresence>
@@ -1235,9 +1277,9 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
                                             {isSearching && (
                                                 <div className="absolute right-3 top-2.5">
                                                     <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
-                            </div>
+                                                </div>
                                             )}
-                        </div>
+                                        </div>
 
                                         {/* Search Results */}
                                         {friendSearchQuery.length >= 2 && (
@@ -1245,36 +1287,52 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
                                                 {isSearching ? (
                                                     <p className="text-xs text-gray-500 py-2">Searching...</p>
                                                 ) : searchResults.length > 0 ? (
-                                                    searchResults.map((user) => (
-                                                        <div
-                                                            key={user.id}
-                                                            className="flex items-center justify-between p-2 bg-gray-50 rounded-lg hover:bg-gray-100"
-                                                        >
-                                                            <div className="flex items-center gap-2 flex-1 min-w-0">
-                                                                {user.avatar_url ? (
-                                                                    <img
-                                                                        src={user.avatar_url}
-                                                                        alt={user.username}
-                                                                        className="w-6 h-6 rounded-full object-cover"
-                                                                    />
-                                                                ) : (
-                                                                    <div className="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center">
-                                                                        <User className="w-4 h-4 text-gray-600" />
-                                                                    </div>
-                                                                )}
-                                                                <span className="text-sm font-medium text-gray-900 truncate">
-                                                                    {user.username}
-                                                                </span>
-                                                            </div>
-                                                            <button
-                                                                onClick={() => sendFriendRequest(user.id)}
-                                                                className="p-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors"
-                                                                title="Send friend request"
+                                                    searchResults.map((user) => {
+                                                        // Check if user is already a friend
+                                                        const existingFriend = friendsList.find(f => f.friend.id === user.id)
+                                                        const isFriend = !!existingFriend
+
+                                                        return (
+                                                            <div
+                                                                key={user.id}
+                                                                className="flex items-center justify-between p-2 bg-gray-50 rounded-lg hover:bg-gray-100"
                                                             >
-                                                                <UserPlus className="w-4 h-4" />
-                                                            </button>
-                                                        </div>
-                                                    ))
+                                                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                                    {user.avatar_url ? (
+                                                                        <img
+                                                                            src={user.avatar_url}
+                                                                            alt={user.username}
+                                                                            className="w-6 h-6 rounded-full object-cover"
+                                                                        />
+                                                                    ) : (
+                                                                        <div className="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center">
+                                                                            <User className="w-4 h-4 text-gray-600" />
+                                                                        </div>
+                                                                    )}
+                                                                    <span className="text-sm font-medium text-gray-900 truncate">
+                                                                        {user.username}
+                                                                    </span>
+                                                                </div>
+                                                                {isFriend ? (
+                                                                    <button
+                                                                        onClick={() => removeFriend(existingFriend!.id)}
+                                                                        className="p-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                                                                        title="Remove friend"
+                                                                    >
+                                                                        <UserMinus className="w-4 h-4" />
+                                                                    </button>
+                                                                ) : (
+                                                                    <button
+                                                                        onClick={() => sendFriendRequest(user.id)}
+                                                                        className="p-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors"
+                                                                        title="Send friend request"
+                                                                    >
+                                                                        <UserPlus className="w-4 h-4" />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        )
+                                                    })
                                                 ) : (
                                                     <p className="text-xs text-gray-500 py-2">
                                                         No users found. Make sure the user has set a username in their profile.
@@ -1422,48 +1480,48 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
                             className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors"
                         >
                             <MetaIcon className="w-6 h-6 flex-shrink-0" />
-                        <AnimatePresence>
-                            {isExpanded && (
-                                <motion.span
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    className="whitespace-nowrap font-medium"
-                                >
+                            <AnimatePresence>
+                                {isExpanded && (
+                                    <motion.span
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        className="whitespace-nowrap font-medium"
+                                    >
                                         Meta
-                                </motion.span>
-                            )}
-                        </AnimatePresence>
-                    </button>
-                </Tooltip>
+                                    </motion.span>
+                                )}
+                            </AnimatePresence>
+                        </button>
+                    </Tooltip>
 
                     {/* Projects Icon */}
                     <div className="flex flex-col">
-                <Tooltip
+                        <Tooltip
                             content="Projects"
-                    placement="right"
-                    classNames={{
-                        content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
-                    }}
-                >
-                    <button
+                            placement="right"
+                            classNames={{
+                                content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
+                            }}
+                        >
+                            <button
                                 onClick={() => {
                                     if (!isExpanded) {
                                         setIsExpanded(true)
                                     }
                                     setShowProjects(!showProjects)
                                 }}
-                        className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors"
-                    >
+                                className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors"
+                            >
                                 <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
                                     <CurateSessionIcon className="w-6 h-6" />
                                 </div>
-                        <AnimatePresence>
-                            {isExpanded && (
+                                <AnimatePresence>
+                                    {isExpanded && (
                                         <motion.div
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            exit={{ opacity: 0 }}
                                             className="flex items-center justify-between flex-1"
                                         >
                                             <span className="whitespace-nowrap font-medium">Projects</span>
@@ -1471,10 +1529,10 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
                                                 className={`w-4 h-4 transition-transform ${showProjects ? 'rotate-180' : ''}`}
                                             />
                                         </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </button>
-                </Tooltip>
+                                    )}
+                                </AnimatePresence>
+                            </button>
+                        </Tooltip>
 
                         {/* Projects List */}
                         <AnimatePresence>
@@ -1532,16 +1590,16 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
                         </AnimatePresence>
                     </div>
 
-                {/* Expanded Content Area */}
-                <AnimatePresence>
-                    {isExpanded && (
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="mt-4 flex-1 flex flex-col"
-                        >
-                            {/* Controls */}
+                    {/* Expanded Content Area */}
+                    <AnimatePresence>
+                        {isExpanded && (
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="mt-4 flex-1 flex flex-col"
+                            >
+                                {/* Controls */}
                                 <div className="flex items-center justify-between mb-4 text-sm text-gray-600">
                                     <div className="relative flex-1 mr-4">
                                         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -1553,11 +1611,11 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
                                             className="w-full pl-10 pr-3 py-2 text-sm text-black border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                         />
                                     </div>
-                                <button className="flex items-center gap-1 hover:text-black">
-                                    Sort
-                                    <AlignLeft className="w-4 h-4 rotate-180" />
-                                </button>
-                            </div>
+                                    <button className="flex items-center gap-1 hover:text-black">
+                                        Sort
+                                        <AlignLeft className="w-4 h-4 rotate-180" />
+                                    </button>
+                                </div>
 
                                 {/* Search Results */}
                                 {findSearchQuery.trim() !== '' ? (
@@ -1625,28 +1683,28 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
                                     </div>
                                 ) : (
                                     /* Empty State */
-                            <div className="flex-1 flex flex-col items-center justify-center text-center text-gray-500">
+                                    <div className="flex-1 flex flex-col items-center justify-center text-center text-gray-500">
                                         <h3 className="text-lg font-medium text-black mb-2">search for your projects and sessions here</h3>
-                                <p className="text-sm max-w-[200px]">
+                                        <p className="text-sm max-w-[200px]">
                                             they will appear here after you create them.
-                                </p>
-                            </div>
+                                        </p>
+                                    </div>
                                 )}
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-            </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
 
-            {/* Bottom Actions */}
-            <div className="p-6 flex flex-col gap-6">
-                <Tooltip
-                    content="Profile"
-                    placement="right"
-                    classNames={{
-                        content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
-                    }}
-                >
-                        <button 
+                {/* Bottom Actions */}
+                <div className="p-6 flex flex-col gap-6">
+                    <Tooltip
+                        content="Profile"
+                        placement="right"
+                        classNames={{
+                            content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
+                        }}
+                    >
+                        <button
                             className="flex items-center gap-4"
                             onClick={() => {
                                 if (clerkUser) {
@@ -1654,13 +1712,13 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
                                 }
                             }}
                             disabled={!clerkUser}
-                >
+                        >
                             <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 flex-shrink-0 border-2 border-gray-300 relative">
                                 {avatarUrl && clerkUser ? (
                                     <img
                                         key={`avatar-${avatarUrl}-${avatarKey}`}
                                         src={`${avatarUrl}${avatarUrl.includes('?') ? '&' : '?'}_t=${avatarKey}`}
-                                alt="Profile"
+                                        alt="Profile"
                                         className="w-full h-full object-cover block"
                                         style={{ display: 'block' }}
                                         onLoad={() => {
@@ -1684,29 +1742,29 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
                                         <User className="w-5 h-5 text-gray-400" />
                                     </div>
                                 )}
-                        </div>
-                        <AnimatePresence>
-                            {isExpanded && (
-                                <motion.div
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    className="text-left"
-                                >
+                            </div>
+                            <AnimatePresence>
+                                {isExpanded && (
+                                    <motion.div
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        className="text-left"
+                                    >
                                         <div className="text-sm font-medium text-black">{username}</div>
                                         <div className="text-xs text-gray-500">
                                             {clerkUser ? 'View Profile' : 'Sign in to view profile'}
                                         </div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </button>
-                </Tooltip>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </button>
+                    </Tooltip>
 
                     {/* Auth Button */}
                     <div className="pt-4 border-t border-gray-200">
                         <AuthButton isSidebarExpanded={isExpanded} />
-            </div>
+                    </div>
                 </div>
 
                 {/* Settings Modal - rendered via portal at body level */}
@@ -1716,7 +1774,7 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
                     username={username}
                     avatarUrl={avatarUrl || undefined}
                 />
-        </motion.div>
+            </motion.div>
 
             {/* Floating Messages Button - Bottom Right */}
             <motion.button

@@ -30,7 +30,7 @@ export default function SearchableSelect({
   const [searchQuery, setSearchQuery] = useState('')
   const [options, setOptions] = useState<string[] | Array<{ name: string; id: string; logo?: string }>>([])
   const [internalLogo, setInternalLogo] = useState<string | null>(null)
-  
+
   // Use external logo if provided, otherwise use internal state
   // Don't show logo if value is empty
   const selectedLogo = !value ? null : (externalLogo !== null ? externalLogo : internalLogo)
@@ -69,7 +69,7 @@ export default function SearchableSelect({
     }
 
     // Debounce search
-    const timeoutId = setTimeout(fetchOptions, 300)
+    const timeoutId = setTimeout(fetchOptions, 600)
     return () => clearTimeout(timeoutId)
   }, [searchQuery, isOpen, onSearch])
 
@@ -122,17 +122,17 @@ export default function SearchableSelect({
     setSearchQuery('')
     setHighlightedIndex(-1)
   }
-  
+
   // Helper to get display value from option
   const getOptionValue = (option: string | { name: string; id: string; logo?: string }): string => {
     return typeof option === 'string' ? option : option.name
   }
-  
+
   // Helper to get logo from option
   const getOptionLogo = (option: string | { name: string; id: string; logo?: string }): string | null => {
     return typeof option === 'string' ? null : (option.logo || null)
   }
-  
+
   // Helper to get option for highlighting
   const getOption = (index: number): string | { name: string; id: string; logo?: string } | undefined => {
     return options[index]
@@ -183,10 +183,10 @@ export default function SearchableSelect({
             onChange={(e) => {
               setSearchQuery(e.target.value)
               setIsOpen(true)
-            if (!e.target.value) {
-              onChange('')
-              setInternalLogo(null)
-            }
+              if (!e.target.value) {
+                onChange('')
+                setInternalLogo(null)
+              }
             }}
             onFocus={() => setIsOpen(true)}
             onKeyDown={handleKeyDown}
@@ -233,17 +233,17 @@ export default function SearchableSelect({
                 const optionLogo = getOptionLogo(option)
                 const optionKey = typeof option === 'string' ? option : `${option.id}-${option.name}`
                 return (
-                <button
+                  <button
                     key={optionKey}
-                  type="button"
-                  onClick={() => handleSelect(option)}
-                  className={cn(
-                    'w-full text-left px-2 py-1.5 text-sm rounded-sm hover:bg-gray-100 focus:bg-gray-100 focus:outline-none flex items-center gap-2 text-gray-900',
-                    index === highlightedIndex && 'bg-gray-100',
+                    type="button"
+                    onClick={() => handleSelect(option)}
+                    className={cn(
+                      'w-full text-left px-2 py-1.5 text-sm rounded-sm hover:bg-gray-100 focus:bg-gray-100 focus:outline-none flex items-center gap-2 text-gray-900',
+                      index === highlightedIndex && 'bg-gray-100',
                       value === optionValue && 'font-medium'
-                  )}
-                  onMouseEnter={() => setHighlightedIndex(index)}
-                >
+                    )}
+                    onMouseEnter={() => setHighlightedIndex(index)}
+                  >
                     {showLogo && optionLogo && (
                       <img
                         src={optionLogo}
@@ -256,9 +256,9 @@ export default function SearchableSelect({
                     )}
                     <span className="text-gray-900 flex-1">{optionValue}</span>
                     {value === optionValue && (
-                    <Check className="h-4 w-4 text-gray-600 flex-shrink-0" />
-                  )}
-                </button>
+                      <Check className="h-4 w-4 text-gray-600 flex-shrink-0" />
+                    )}
+                  </button>
                 )
               })
             )}
