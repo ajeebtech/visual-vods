@@ -26,6 +26,7 @@ export default function Home() {
   const [team1, setTeam1] = useState('')
   const [team2, setTeam2] = useState('')
   const [tournament, setTournament] = useState('')
+  const [tournamentId, setTournamentId] = useState<string | null>(null)
   const [playerName, setPlayerName] = useState('')
 
   // Store team IDs for fetching matches
@@ -60,6 +61,7 @@ export default function Home() {
     setTeam1('')
     setTeam2('')
     setTournament('')
+    setTournamentId(null)
     setPlayerName('')
     setTeam1Id(null)
     setTeam2Id(null)
@@ -201,6 +203,13 @@ export default function Home() {
     }
     if (session.tournament) {
       setTournament(session.tournament)
+      // Note: session might not have tournament_id if it's an old session
+      // We might need to fetch it or just rely on name if we supported name-based search before
+      // For now, let's assume if we have tournament name we might not have ID unless we saved it
+      // If we don't have ID, we can't easily search by ID.
+      // But existing sessions probably don't have tournament ID.
+      // Let's check if session has tournament_id (it should if we update the schema, but we haven't)
+      // For now, just set the name.
     }
     if (session.player_name) {
       setPlayerName(session.player_name)
@@ -243,6 +252,11 @@ export default function Home() {
     }
   }
 
+  const handleTournamentChange = (value: string, id?: string) => {
+    setTournament(value)
+    setTournamentId(id || null)
+  }
+
   const handlePlayerNameChange = (value: string, id?: string) => {
     setPlayerName(value)
     setPlayerId(id || null)
@@ -280,6 +294,12 @@ export default function Home() {
   // Extract team ID from search result path (e.g., /search/r/team/2593/ac -> 2593)
   const extractTeamId = (path: string): string | null => {
     const match = path.match(/\/search\/r\/team\/(\d+)\//)
+    return match ? match[1] : null
+  }
+
+  // Extract tournament ID from search result path (e.g., /search/r/event/2283/ac -> 2283)
+  const extractTournamentId = (path: string): string | null => {
+    const match = path.match(/\/search\/r\/event\/(\d+)\//)
     return match ? match[1] : null
   }
 
@@ -399,7 +419,7 @@ export default function Home() {
     return teamsWithLogos
   }
 
-  const searchTournaments = async (query: string): Promise<string[]> => {
+  const searchTournaments = async (query: string): Promise<Array<{ name: string; id: string }>> => {
     const results = await fetchVLRResults(query)
     if (!results.length) return []
 
@@ -408,19 +428,27 @@ export default function Home() {
     if (eventsIndex === -1) return []
 
     // Get all items after the events header until the next category or end
-    const tournaments: string[] = []
+    const tournaments: Array<{ name: string; id: string }> = []
+    const seenNames = new Set<string>()
+
     for (let i = eventsIndex + 1; i < results.length; i++) {
       const item = results[i]
       // Stop if we hit another category header
       if (item.id === '#') break
       // Add tournament names (items with id starting with /search/r/event/)
       if (item.id && item.id.startsWith('/search/r/event/') && item.value) {
-        tournaments.push(item.value)
+        const eventId = extractTournamentId(item.id)
+        if (eventId && !seenNames.has(item.value)) {
+          tournaments.push({
+            name: item.value,
+            id: eventId
+          })
+          seenNames.add(item.value)
+        }
       }
     }
 
-    // Remove duplicates
-    return Array.from(new Set(tournaments))
+    return tournaments
   }
 
   const searchPlayerName = async (query: string): Promise<Array<{ name: string; id: string }>> => {
@@ -463,6 +491,7 @@ export default function Home() {
     const limitKey = `limit:${effectiveLimit}`
 
     try {
+      // 1. Player Search
       if (playerName && playerId) {
         let queryParams = `playerId=${playerId}&playerName=${encodeURIComponent(playerName)}&limit=${effectiveLimit}`
 
@@ -484,12 +513,6 @@ export default function Home() {
         if (cached) {
           console.log('Player matches data from cache:', cached)
           setMatchesData(cached)
-          console.log(`Found ${cached.totalMatches} total matches`)
-          console.log(`Fetched ${cached.fetchedMatches} matches`)
-          console.log(`${cached.matchesWithVODs} matches have VOD links`)
-          if (cached.latestMatch && cached.latestMatch.vodLinks) {
-            console.log('Latest match VODs:', cached.latestMatch.vodLinks)
-          }
           return
         }
 
@@ -497,20 +520,53 @@ export default function Home() {
         if (response.ok) {
           const data = await response.json()
           setCached(cacheKey, data, 3600)
-          console.log('Player matches data:', data)
           setMatchesData(data)
-          console.log(`Found ${data.totalMatches} total matches (limit ${data.requestedLimit ?? effectiveLimit})`)
-          console.log(`Fetched ${data.fetchedMatches} matches`)
-          console.log(`${data.matchesWithVODs} matches have VOD links`)
-          if (data.latestMatch && data.latestMatch.vodLinks) {
-            console.log('Latest match VODs:', data.latestMatch.vodLinks)
-          }
         }
-
         return
       }
 
-      if (team1 && team1Id && !playerName) {
+      // 2. Tournament Search
+      if (tournament && tournamentId) {
+        let queryParams = `tournamentId=${tournamentId}&limit=${effectiveLimit}`
+
+        if (team1 && team1Id) {
+          queryParams += `&team1Id=${team1Id}&team1Name=${encodeURIComponent(team1)}`
+        } else if (team1) {
+          queryParams += `&team1Name=${encodeURIComponent(team1)}`
+        }
+
+        if (team2 && team2Id) {
+          queryParams += `&team2Id=${team2Id}&team2Name=${encodeURIComponent(team2)}`
+        } else if (team2) {
+          queryParams += `&team2Name=${encodeURIComponent(team2)}`
+        }
+
+        const cacheKey = getCacheKey(
+          'vlr:tournament-matches',
+          tournamentId,
+          team1Id ? `t1:${team1Id}` : 'none',
+          team2Id ? `t2:${team2Id}` : 'none',
+          limitKey
+        )
+
+        const cached = getCached<any>(cacheKey)
+        if (cached) {
+          console.log('Tournament matches data from cache:', cached)
+          setMatchesData(cached)
+          return
+        }
+
+        const response = await fetch(`/api/vlr-tournament-matches?${queryParams}`)
+        if (response.ok) {
+          const data = await response.json()
+          setCached(cacheKey, data, 3600)
+          setMatchesData(data)
+        }
+        return
+      }
+
+      // 3. Team Search
+      if (team1 && team1Id) {
         let queryParams = `teamId=${team1Id}&teamName=${encodeURIComponent(team1)}&limit=${effectiveLimit}`
 
         if (team2 && team2Id) {
@@ -530,9 +586,6 @@ export default function Home() {
         if (cached) {
           console.log('Team matches data from cache:', cached)
           setMatchesData(cached)
-          console.log(`Found ${cached.totalMatches} total matches (limit ${cached.requestedLimit ?? effectiveLimit})`)
-          console.log(`Fetched ${cached.fetchedMatches} matches`)
-          console.log(`${cached.matchesWithVODs} matches have VOD links`)
           return
         }
 
@@ -540,16 +593,7 @@ export default function Home() {
         if (response.ok) {
           const data = await response.json()
           setCached(cacheKey, data, 3600)
-          console.log('Team matches data:', data)
           setMatchesData(data)
-          console.log(`Found ${data.totalMatches} total matches (limit ${data.requestedLimit ?? effectiveLimit})`)
-          console.log(`Fetched ${data.fetchedMatches} matches`)
-          console.log(`${data.matchesWithVODs} matches have VOD links`)
-          data.matches.forEach((match: any) => {
-            if (match.hasVODs) {
-              console.log(`Match ${match.matchId}:`, match.vodLinks)
-            }
-          })
         }
       }
     } catch (error) {
@@ -557,7 +601,7 @@ export default function Home() {
     } finally {
       setIsLoading(false)
     }
-  }, [matchLimit, playerId, playerName, team1, team1Id, team2, team2Id, tournament])
+  }, [matchLimit, playerId, playerName, team1, team1Id, team2, team2Id, tournament, tournamentId])
 
   const { openSignIn } = useClerk()
 
@@ -706,10 +750,10 @@ export default function Home() {
                   <SearchableSelect
                     placeholder="Tournament (optional)"
                     value={tournament}
-                    onChange={setTournament}
+                    onChange={handleTournamentChange}
                     onSearch={searchTournaments}
                     className="flex-1 min-w-[150px]"
-                    disabled={true}
+                    disabled={false}
                   />
                   <SearchableSelect
                     placeholder="Player Name"
