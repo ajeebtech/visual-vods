@@ -260,7 +260,12 @@ export default function Home() {
   const handlePlayerNameChange = (value: string, id?: string) => {
     setPlayerName(value)
     setPlayerId(id || null)
-    // Don't clear teams - allow filtering player matches by teams
+    // Clear team2 when player is selected to enforce team1-only filtering
+    if (value) {
+      setTeam2('')
+      setTeam2Id(null)
+      setTeam2Logo(null)
+    }
   }
 
   // Helper function to fetch from VLR.gg autocomplete API via our proxy
@@ -746,6 +751,7 @@ export default function Home() {
                     className="flex-1 min-w-[150px]"
                     showLogo={true}
                     selectedLogo={team2Logo}
+                    disabled={!!playerName}
                   />
                   <SearchableSelect
                     placeholder="Tournament (optional)"
@@ -761,7 +767,7 @@ export default function Home() {
                     onChange={handlePlayerNameChange}
                     onSearch={searchPlayerName}
                     className="flex-1 min-w-[150px]"
-                    disabled={true}
+                    disabled={false}
                   />
                 </div>
 

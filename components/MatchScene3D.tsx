@@ -5,12 +5,13 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera, Html } from '@react-three/drei'
 import { EffectComposer, Vignette } from '@react-three/postprocessing'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, ChevronDown, ChevronUp, Check } from 'lucide-react'
+import { X, ChevronDown, ChevronUp, Check, List } from 'lucide-react'
 import * as THREE from 'three'
 import { useUser, useSession } from '@clerk/nextjs'
 import NotesPanel from '@/components/NotesPanel'
 import { getCached, setCached, getCacheKey } from '@/lib/local-cache'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import MatchListView from '@/components/MatchListView'
 
 interface VODLink {
   url: string
@@ -469,6 +470,7 @@ export default function MatchScene3D({
   }>>([])
   const [isLoadingStats, setIsLoadingStats] = useState(false)
   const [isStatsMinimized, setIsStatsMinimized] = useState(false)
+  const [viewMode, setViewMode] = useState<'3d' | 'list'>('3d')
 
   // Update sessionId when initialSessionId changes (when loading an old session)
   useEffect(() => {
@@ -837,81 +839,91 @@ export default function MatchScene3D({
 
   return (
     <>
-      <div className="fixed inset-0 z-30">
-        <Canvas
-          gl={{ antialias: true, alpha: true }}
-          dpr={[1, 2]}
-          className="bg-gray-100"
-        >
-          <PerspectiveCamera
-            makeDefault
-            position={[0, 0, 15]}
-            fov={75}
-          />
+      {/* Conditional rendering based on view mode */}
+      {viewMode === '3d' ? (
+        <div className="fixed inset-0 z-30">
+          <Canvas
+            gl={{ antialias: true, alpha: true }}
+            dpr={[1, 2]}
+            className="bg-gray-100"
+          >
+            <PerspectiveCamera
+              makeDefault
+              position={[0, 0, 15]}
+              fov={75}
+            />
 
-          {/* Lighting - increased for brighter thumbnails */}
-          <ambientLight intensity={0.8} />
-          <directionalLight position={[10, 10, 5]} intensity={1.2} />
-          <pointLight position={[-10, -10, -5]} intensity={0.6} />
-          <pointLight position={[0, 10, 0]} intensity={0.5} /> {/* Top light for better visibility */}
+            {/* Lighting - increased for brighter thumbnails */}
+            <ambientLight intensity={0.8} />
+            <directionalLight position={[10, 10, 5]} intensity={1.2} />
+            <pointLight position={[-10, -10, -5]} intensity={0.6} />
+            <pointLight position={[0, 10, 0]} intensity={0.5} /> {/* Top light for better visibility */}
 
-          {/* Camera controls - only zoom, no rotation */}
-          <OrbitControls
-            enablePan={false} // Disable panning as requested
-            enableZoom={true}
-            enableRotate={true}
-            autoRotate={false}
-            zoomSpeed={1.2}
-            minDistance={8}
-            maxDistance={25}
-            minPolarAngle={Math.PI / 4} // Allow viewing from side
-            maxPolarAngle={Math.PI / 1.5}
-            minAzimuthAngle={-Infinity} // Allow full horizontal rotation
-            maxAzimuthAngle={Infinity}
-          />
+            {/* Camera controls - only zoom, no rotation */}
+            <OrbitControls
+              enablePan={false} // Disable panning as requested
+              enableZoom={true}
+              enableRotate={true}
+              autoRotate={false}
+              zoomSpeed={1.2}
+              minDistance={8}
+              maxDistance={25}
+              minPolarAngle={Math.PI / 4} // Allow viewing from side
+              maxPolarAngle={Math.PI / 1.5}
+              minAzimuthAngle={-Infinity} // Allow full horizontal rotation
+              maxAzimuthAngle={Infinity}
+            />
 
-          {/* Match tiles - progressive rendering with fade-in */}
-          {matchesToDisplay.map((match, displayIndex) => {
-            const firstVOD = match.vodLinks[0]
-            const thumbnail = getYouTubeThumbnail(firstVOD.url)
-            // Find the original index in filteredMatches for position
-            const originalIndex = filteredMatches.findIndex(m =>
-              (m.matchId && m.matchId === match.matchId) ||
-              (!m.matchId && m.href === match.href)
-            )
+            {/* Match tiles - progressive rendering with fade-in */}
+            {matchesToDisplay.map((match, displayIndex) => {
+              const firstVOD = match.vodLinks[0]
+              const thumbnail = getYouTubeThumbnail(firstVOD.url)
+              // Find the original index in filteredMatches for position
+              const originalIndex = filteredMatches.findIndex(m =>
+                (m.matchId && m.matchId === match.matchId) ||
+                (!m.matchId && m.href === match.href)
+              )
 
-            // Check if this match should be visible (for fade-in animation)
-            const isVisible = displayIndex < visibleMatches
-            const hasNotes = matchesWithNotes.has(match.href)
-            if (hasNotes) {
-              console.log(`[MatchScene3D] Match ${match.href} has notes!`)
-            }
+              // Check if this match should be visible (for fade-in animation)
+              const isVisible = displayIndex < visibleMatches
+              const hasNotes = matchesWithNotes.has(match.href)
+              if (hasNotes) {
+                console.log(`[MatchScene3D] Match ${match.href} has notes!`)
+              }
 
-            return (
-              <MatchTile
-                key={match.matchId || displayIndex}
-                position={positions[originalIndex >= 0 ? originalIndex : displayIndex].position}
-                rotation={positions[originalIndex >= 0 ? originalIndex : displayIndex].rotation}
-                thumbnail={thumbnail}
-                match={match}
-                onSelect={() => handleThumbnailClick(match)}
-                index={originalIndex >= 0 ? originalIndex : displayIndex}
-                isVisible={isVisible}
-                hasNotes={hasNotes}
-                searchedTeamName={team1Name}
-                onThumbnailLoad={(idx) => {
-                  setLoadedThumbnails(prev => new Set([...Array.from(prev), idx]))
-                }}
-              />
-            )
-          })}
+              return (
+                <MatchTile
+                  key={match.matchId || displayIndex}
+                  position={positions[originalIndex >= 0 ? originalIndex : displayIndex].position}
+                  rotation={positions[originalIndex >= 0 ? originalIndex : displayIndex].rotation}
+                  thumbnail={thumbnail}
+                  match={match}
+                  onSelect={() => handleThumbnailClick(match)}
+                  index={originalIndex >= 0 ? originalIndex : displayIndex}
+                  isVisible={isVisible}
+                  hasNotes={hasNotes}
+                  searchedTeamName={team1Name}
+                  onThumbnailLoad={(idx) => {
+                    setLoadedThumbnails(prev => new Set([...Array.from(prev), idx]))
+                  }}
+                />
+              )
+            })}
 
-          {/* Post-processing effects */}
-          <EffectComposer>
-            <Vignette eskil={false} offset={0.1} darkness={0.5} />
-          </EffectComposer>
-        </Canvas>
-      </div>
+            {/* Post-processing effects */}
+            <EffectComposer>
+              <Vignette eskil={false} offset={0.1} darkness={0.5} />
+            </EffectComposer>
+          </Canvas>
+        </div>
+      ) : (
+        <MatchListView
+          matches={matchesToDisplay}
+          onMatchClick={handleThumbnailClick}
+          matchesWithNotes={matchesWithNotes}
+          searchedTeamName={team1Name}
+        />
+      )}
 
       {/* Date filter dropdown and team stats - top right */}
       <div className="fixed top-4 right-4 z-40 flex flex-col gap-3 items-end">
@@ -927,19 +939,15 @@ export default function MatchScene3D({
                 type="button"
                 onClick={() => onMatchLimitChange?.(option)}
                 disabled={!onMatchLimitChange || option === matchLimit || isFetchingMatches}
-                className={`px-3 py-1 rounded-full text-xs font-semibold transition ${
-                  option === matchLimit
-                    ? 'bg-gray-900 text-white shadow-md'
-                    : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
-                } ${(!onMatchLimitChange || isFetchingMatches) ? 'cursor-not-allowed opacity-60' : ''}`}
+                className={`px-3 py-1 rounded-full text-xs font-semibold transition ${option === matchLimit
+                  ? 'bg-gray-900 text-white shadow-md'
+                  : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                  } ${(!onMatchLimitChange || isFetchingMatches) ? 'cursor-not-allowed opacity-60' : ''}`}
               >
                 {option}
               </button>
             ))}
           </div>
-          <p className="text-[11px] text-gray-500 mt-2">
-            Showing up to {matchLimit} matches from the current search.
-          </p>
           {isFetchingMatches && (
             <p className="text-[11px] text-gray-600 mt-1">Fetching matches…</p>
           )}
@@ -957,10 +965,10 @@ export default function MatchScene3D({
             <button
               onClick={() => setIsStatsMinimized(!isStatsMinimized)}
               className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
-          >
+            >
               <h3 className="text-sm font-semibold text-gray-900">
-              {team1Name} Map Stats
-            </h3>
+                {team1Name} Map Stats
+              </h3>
               <motion.div
                 animate={{ rotate: isStatsMinimized ? 0 : 180 }}
                 transition={{ duration: 0.2 }}
@@ -981,23 +989,23 @@ export default function MatchScene3D({
                 >
                   <ScrollArea className="h-[400px] px-4 pb-4 w-full [mask-image:linear-gradient(to_bottom,black_calc(100%-24px),transparent_100%)]">
                     <div className="space-y-3 pr-3">
-            {isLoadingStats ? (
-              <p className="text-xs text-gray-500">Loading stats...</p>
-            ) : mapStats.length > 0 ? (
+                      {isLoadingStats ? (
+                        <p className="text-xs text-gray-500">Loading stats...</p>
+                      ) : mapStats.length > 0 ? (
                         mapStats.map((stat, index) => {
                           const winPercentValue = parseFloat(stat.winPercent)
                           const isPositiveWinRate = !isNaN(winPercentValue) && winPercentValue > 50
                           const isNegativeWinRate = !isNaN(winPercentValue) && winPercentValue < 50
 
                           return (
-                  <div
-                    key={index}
-                    className="border-b border-gray-200 pb-2 last:border-b-0 last:pb-0"
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium text-gray-900">
-                        {stat.mapName}
-                      </span>
+                            <div
+                              key={index}
+                              className="border-b border-gray-200 pb-2 last:border-b-0 last:pb-0"
+                            >
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-sm font-medium text-gray-900">
+                                  {stat.mapName}
+                                </span>
                                 <span
                                   className={`text-xs ${isPositiveWinRate
                                     ? 'text-green-500 font-semibold'
@@ -1006,27 +1014,27 @@ export default function MatchScene3D({
                                       : 'text-gray-600'
                                     }`}
                                 >
-                        {stat.winPercent} ({stat.wins}W-{stat.losses}L)
-                      </span>
-                    </div>
-                    {stat.mostPlayedComp.length > 0 && (
-                      <div className="flex items-center gap-1 mt-1">
-                        {stat.mostPlayedComp.map((agent, agentIndex) => (
-                          <img
-                            key={agentIndex}
-                            src={`https://www.vlr.gg/img/vlr/game/agents/${agent}.png`}
-                            alt={agent.charAt(0).toUpperCase() + agent.slice(1)}
-                            style={{ width: '25px', marginLeft: agentIndex === 0 ? '0' : '8px', display: 'inline-block' }}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                                  {stat.winPercent} ({stat.wins}W-{stat.losses}L)
+                                </span>
+                              </div>
+                              {stat.mostPlayedComp.length > 0 && (
+                                <div className="flex items-center gap-1 mt-1">
+                                  {stat.mostPlayedComp.map((agent, agentIndex) => (
+                                    <img
+                                      key={agentIndex}
+                                      src={`https://www.vlr.gg/img/vlr/game/agents/${agent}.png`}
+                                      alt={agent.charAt(0).toUpperCase() + agent.slice(1)}
+                                      style={{ width: '25px', marginLeft: agentIndex === 0 ? '0' : '8px', display: 'inline-block' }}
+                                    />
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                           )
                         })
-            ) : (
-              <p className="text-xs text-gray-500">No stats available</p>
-            )}
+                      ) : (
+                        <p className="text-xs text-gray-500">No stats available</p>
+                      )}
                     </div>
                   </ScrollArea>
                 </motion.div>
@@ -1077,6 +1085,34 @@ export default function MatchScene3D({
                 Loading thumbnails... ({matchesToDisplay.length - loadedThumbnails.size} remaining)
               </p>
             )}
+
+            {/* View Mode Toggle - Icon only buttons */}
+            <div className="flex items-center gap-2 mt-3 pt-2 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={() => setViewMode('3d')}
+                className={`w-8 h-8 rounded-lg transition flex items-center justify-center ${viewMode === '3d'
+                  ? 'bg-gray-900 text-white shadow-md'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                title="3D Spiral View"
+              >
+                <svg className="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
+                  <path d="M136,136a8,8,0,0,1,8,8,16,16,0,0,1-16,16,24,24,0,0,1-24-24,32,32,0,0,1,32-32,40,40,0,0,1,40,40,48,48,0,0,1-48,48,56,56,0,0,1-56-56,64,64,0,0,1,64-64,72,72,0,0,1,72,72,80,80,0,0,1-80,80,88,88,0,0,1-88-88,96,96,0,0,1,96-96A104,104,0,0,1,240,144" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('list')}
+                className={`w-8 h-8 rounded-lg transition flex items-center justify-center ${viewMode === 'list'
+                  ? 'bg-gray-900 text-white shadow-md'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                title="List View"
+              >
+                <List className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
           {/* Session Save Status */}
