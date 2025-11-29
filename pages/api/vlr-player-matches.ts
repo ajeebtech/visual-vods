@@ -128,40 +128,6 @@ export default async function handler(
 
       const matchPromises: Array<Promise<MatchData | null>> = []
 
-      // Helper function to extract VOD links from HTML
-      const extractVodLinks = ($context: cheerio.CheerioAPI | cheerio.Cheerio<any>): Array<{ url: string; platform: 'youtube' | 'twitch' | 'other'; embedUrl?: string }> => {
-        const vodLinks: Array<{ url: string; platform: 'youtube' | 'twitch' | 'other'; embedUrl?: string }> = []
-
-        // Handle both CheerioAPI and Cheerio types
-        const $selection = 'root' in $context ? $context('body') : $context
-
-        $selection.find('a[href*="youtube.com"], a[href*="youtu.be"], a[href*="twitch.tv"]').each((_, vodElement) => {
-          const vodUrl = $selection.find(vodElement).attr('href') || ''
-          let platform: 'youtube' | 'twitch' | 'other' = 'other'
-          let embedUrl = vodUrl
-
-          if (vodUrl.includes('youtube.com') || vodUrl.includes('youtu.be')) {
-            platform = 'youtube'
-            const videoIdMatch = vodUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/)
-            if (videoIdMatch) {
-              embedUrl = `https://www.youtube.com/embed/${videoIdMatch[1]}`
-            }
-          } else if (vodUrl.includes('twitch.tv')) {
-            platform = 'twitch'
-            const twitchMatch = vodUrl.match(/twitch\.tv\/(?:videos\/)?([^/?]+)/)
-            if (twitchMatch) {
-              embedUrl = `https://player.twitch.tv/?video=${twitchMatch[1]}&parent=${encodeURIComponent('localhost')}`
-            }
-          }
-
-          if (vodUrl) {
-            vodLinks.push({ url: vodUrl, platform, embedUrl })
-          }
-        })
-
-        return vodLinks
-      }
-
       // Use the EXACT same logic as team matches API
       // Extract match links - looking for <a> tags with href containing match IDs
       // Based on the pattern: /585458/fnatic-vs-g2-esports-red-bull-home-ground-2025-lr3
@@ -244,11 +210,11 @@ export default async function handler(
 
       console.log(`Found ${uniqueMatchLinks.length} unique match links`)
 
-      // Filter by teams if requested
+      // Filter by teams if requested (optional - if no team filter, show all player matches)
       let filteredMatchLinks = uniqueMatchLinks
 
-      if (team1Name && typeof team1Name === 'string') {
-        const filterTeam1Lower = team1Name.toLowerCase()
+      if (hasTeamFilter) {
+        const filterTeam1Lower = team1Name && typeof team1Name === 'string' ? team1Name.toLowerCase() : null
         const filterTeam2Lower = team2Name && typeof team2Name === 'string' ? team2Name.toLowerCase() : null
 
         filteredMatchLinks = uniqueMatchLinks.filter(link => {
@@ -259,21 +225,29 @@ export default async function handler(
           const urlTeam1 = urlMatch[2].replace(/-/g, ' ').trim().toLowerCase()
           const urlTeam2 = urlMatch[3].split('-')[0].replace(/-/g, ' ').trim().toLowerCase()
 
-          if (filterTeam2Lower) {
+          if (filterTeam1Lower && filterTeam2Lower) {
             // Check if this match is between the two teams (order doesn't matter)
             return (urlTeam1 === filterTeam1Lower && urlTeam2 === filterTeam2Lower) ||
               (urlTeam1 === filterTeam2Lower && urlTeam2 === filterTeam1Lower)
-          } else {
+          } else if (filterTeam1Lower) {
             // If only team1 is provided, user requested "matches with team1 in the left side"
             return urlTeam1 === filterTeam1Lower
+          } else if (filterTeam2Lower) {
+            // If only team2 is provided, check team2 position
+            return urlTeam2 === filterTeam2Lower
           }
+          return false
         })
 
-        if (filterTeam2Lower) {
+        if (filterTeam1Lower && filterTeam2Lower) {
           console.log(`Filtered to ${filteredMatchLinks.length} matches between ${team1Name} and ${team2Name}`)
-        } else {
+        } else if (filterTeam1Lower) {
           console.log(`Filtered to ${filteredMatchLinks.length} matches with ${team1Name} on the left side`)
+        } else if (filterTeam2Lower) {
+          console.log(`Filtered to ${filteredMatchLinks.length} matches with ${team2Name}`)
         }
+      } else {
+        console.log(`Showing all ${filteredMatchLinks.length} matches for player ${playerName}`)
       }
 
       // Convert to matchElements format
@@ -372,8 +346,176 @@ export default async function handler(
 
       console.log(`Found ${finalMatchElements.length} matches on player page`)
 
+      // Helper function to extract maps played from match header note
+      const extractMapsPlayed = (html: string): string[] => {
+        const $ = cheerio.load(html)
+        const maps: string[] = []
+
+        try {
+          const headerNote = $('.match-header-note').text().trim()
+          if (!headerNote) return maps
+
+          const parts = headerNote.split(';').map(p => p.trim()).filter(p => p.length > 0)
+
+          for (const part of parts) {
+            const pickMatch = part.match(/\b(?:pick|picked)\s+([A-Za-z]+)\b/i)
+            if (pickMatch && pickMatch[1]) {
+              const mapName = pickMatch[1].trim()
+              if (mapName && !maps.includes(mapName)) {
+                maps.push(mapName)
+              }
+            }
+
+            const remainsMatch = part.match(/\b([A-Za-z]+)\s+remains\b/i)
+            if (remainsMatch && remainsMatch[1]) {
+              const mapName = remainsMatch[1].trim()
+              if (mapName && !maps.includes(mapName)) {
+                maps.push(mapName)
+              }
+            }
+          }
+
+          return maps
+        } catch (error) {
+          console.error('Error extracting maps played:', error)
+          return maps
+        }
+      }
+
+      // Helper function to extract VOD links from match HTML (same as team matches)
+      const extractVODLinks = (html: string, mapsPlayed: string[]): Array<{ url: string; platform: 'youtube' | 'twitch' | 'other'; embedUrl?: string; mapName?: string }> => {
+        const $ = cheerio.load(html)
+        const vodLinks: Array<{ url: string; platform: 'youtube' | 'twitch' | 'other'; embedUrl?: string; mapName?: string }> = []
+        let youtubeLinkCount = 0
+
+        $('a[href*="youtube.com"], a[href*="youtu.be"], a[href*="twitch.tv"]').each((_, element) => {
+          const href = $(element).attr('href')
+          if (href) {
+            let platform: 'youtube' | 'twitch' | 'other' = 'other'
+            let embedUrl: string | undefined
+            let mapName: string | undefined = undefined
+
+            if (href.includes('youtube.com') || href.includes('youtu.be')) {
+              platform = 'youtube'
+              let videoId: string | null = null
+
+              if (href.includes('youtu.be/')) {
+                const match = href.match(/youtu\.be\/([^?&]+)/)
+                videoId = match ? match[1] : null
+              } else if (href.includes('youtube.com/watch')) {
+                const match = href.match(/[?&]v=([^&]+)/)
+                videoId = match ? match[1] : null
+              } else if (href.includes('youtube.com/embed/')) {
+                const match = href.match(/embed\/([^?&]+)/)
+                videoId = match ? match[1] : null
+              }
+
+              if (videoId) {
+                const timeMatch = href.match(/[?&]t=(\d+)/)
+                const timestamp = timeMatch ? timeMatch[1] : undefined
+                const params = new URLSearchParams()
+                if (timestamp) params.set('start', timestamp)
+                params.set('enablejsapi', '1')
+                params.set('origin', typeof window !== 'undefined' ? window.location.origin : '')
+                embedUrl = `https://www.youtube.com/embed/${videoId}?${params.toString()}`
+
+                if (mapsPlayed.length > 0 && youtubeLinkCount < mapsPlayed.length) {
+                  mapName = mapsPlayed[youtubeLinkCount]
+                }
+                youtubeLinkCount++
+              }
+            } else if (href.includes('twitch.tv')) {
+              platform = 'twitch'
+              const videoMatch = href.match(/twitch\.tv\/videos\/(\d+)/)
+              const channelMatch = href.match(/twitch\.tv\/([^/?]+)/)
+
+              if (videoMatch) {
+                embedUrl = `https://player.twitch.tv/?video=${videoMatch[1]}&parent=localhost`
+              } else if (channelMatch) {
+                embedUrl = `https://player.twitch.tv/?channel=${channelMatch[1]}&parent=localhost`
+              }
+            }
+
+            if (!vodLinks.find(link => link.url === href)) {
+              vodLinks.push({
+                url: href,
+                platform,
+                embedUrl,
+                mapName
+              })
+            }
+          }
+        })
+
+        return vodLinks
+      }
+
+      // Helper function to extract match info from match detail page
+      const extractMatchInfo = (html: string): MatchData['matchInfo'] | undefined => {
+        const $ = cheerio.load(html)
+
+        try {
+          const team1Link = $('.match-header-link.mod-1').first()
+          const team1Name = team1Link.find('.wf-title-med').text().trim() ||
+            team1Link.find('img').attr('alt')?.replace(' team logo', '') ||
+            'Team 1'
+          const team1Logo = team1Link.find('img').attr('src') || null
+          const team1LogoFull = team1Logo && !team1Logo.startsWith('http')
+            ? `https:${team1Logo}`
+            : team1Logo
+
+          const team2Link = $('.match-header-link.mod-2').first()
+          const team2Name = team2Link.find('.wf-title-med').text().trim() ||
+            team2Link.find('img').attr('alt')?.replace(' team logo', '') ||
+            'Team 2'
+          const team2Logo = team2Link.find('img').attr('src') || null
+          const team2LogoFull = team2Logo && !team2Logo.startsWith('http')
+            ? `https:${team2Logo}`
+            : team2Logo
+
+          const scoreContainer = $('.match-header-vs-score').first()
+          const team1Score = parseInt(scoreContainer.find('.match-header-vs-score-loser, .match-header-vs-score-winner').first().text().trim()) || 0
+          const team2Score = parseInt(scoreContainer.find('.match-header-vs-score-loser, .match-header-vs-score-winner').last().text().trim()) || 0
+
+          let winner: 1 | 2 | null = null
+          if (team1Score > team2Score) {
+            winner = 1
+          } else if (team2Score > team1Score) {
+            winner = 2
+          }
+
+          const team1Element = scoreContainer.find('.match-header-vs-score-loser, .match-header-vs-score-winner').first()
+          const team2Element = scoreContainer.find('.match-header-vs-score-loser, .match-header-vs-score-winner').last()
+
+          if (team1Element.hasClass('match-header-vs-score-winner')) {
+            winner = 1
+          } else if (team2Element.hasClass('match-header-vs-score-winner')) {
+            winner = 2
+          }
+
+          return {
+            team1: {
+              name: team1Name,
+              logo: team1LogoFull
+            },
+            team2: {
+              name: team2Name,
+              logo: team2LogoFull
+            },
+            score: {
+              team1: team1Score,
+              team2: team2Score
+            },
+            winner
+          }
+        } catch (error) {
+          console.error('Error extracting match info:', error)
+          return undefined
+        }
+      }
+
       if (finalMatchElements.length === 0) {
-        // Additional debugging: log a sample of links found
+        // Additional debugging
         const sampleLinks: string[] = []
         $('a[href]').each((index, element) => {
           if (index < 20) {
@@ -382,77 +524,93 @@ export default async function handler(
           }
         })
         console.log('Sample links found on page (first 20):', sampleLinks)
-
-        // Check for common container classes
-        const containers = $('.wf-module, .mod-dark, .match-item, [class*="match"]')
-        console.log(`Found ${containers.length} potential match containers`)
-
-        // Try to find any text that looks like a match
-        const bodyText = $('body').text()
-        const matchTextSample = bodyText.match(/(\d+\s*[:]\s*\d+)/)
-        if (matchTextSample) {
-          console.log('Found score pattern in text:', matchTextSample[0])
-        }
       }
 
-      // Process each match asynchronously to fetch VODs
-      for (const matchElement of finalMatchElements.slice(0, 10)) { // Limit to first 10 for VOD fetching
-        const promise = (async () => {
-          // Get VOD links from the match item itself
-          const $match = $(`.wf-module-item, .match-item, [data-match-id]`).filter((_, el) => {
-            const $el = $(el)
-            const link = $el.find('a[href*="/match/"]').first()
-            return link.attr('href') === matchElement.href
-          }).first()
+      // Fetch full match detail pages for all matches (like team matches does)
+      const matchData: Array<MatchData> = []
+      const matchesToFetch = finalMatchElements.slice(0, matchLimit)
 
-          let vodLinks = extractVodLinks($match)
+      console.log(`Fetching ${matchesToFetch.length} match detail pages for VOD extraction...`)
 
-          // If no VODs found in the match item, fetch the match detail page
-          if (vodLinks.length === 0 && matchElement.fullUrl) {
-            try {
-              const matchResponse = await fetch(matchElement.fullUrl, {
-                headers: {
-                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                  'Accept': 'text/html',
-                },
-              })
+      for (const matchElement of matchesToFetch) {
+        try {
+          console.log(`Fetching match ${matchElement.matchId}: ${matchElement.fullUrl}`)
+          const matchResponse = await fetch(matchElement.fullUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              'Accept': 'text/html',
+            },
+          })
 
-              if (matchResponse.ok) {
-                const matchHtml = await matchResponse.text()
-                const $matchPage = cheerio.load(matchHtml)
-                vodLinks = extractVodLinks($matchPage)
-              }
-            } catch (matchError) {
-              console.error('Error fetching match details:', matchError)
-            }
+          if (matchResponse.ok) {
+            const matchHtml = await matchResponse.text()
+            const mapsPlayed = extractMapsPlayed(matchHtml)
+            const vodLinks = extractVODLinks(matchHtml, mapsPlayed)
+            const matchInfo = extractMatchInfo(matchHtml)
+
+            matchData.push({
+              href: matchElement.fullUrl,
+              matchId: matchElement.matchId,
+              vodLinks,
+              matchInfo: matchInfo || {
+                team1: { name: matchElement.matchTeam1Name, logo: null },
+                team2: { name: matchElement.matchTeam2Name, logo: null },
+                score: matchElement.score,
+                winner: matchElement.score.winner
+              },
+              tournament: matchElement.tournament
+            })
+
+            console.log(`Match ${matchElement.matchId}: Found ${vodLinks.length} VOD links, Maps: ${mapsPlayed.join(', ') || 'N/A'}`)
+          } else {
+            console.log(`Failed to fetch match ${matchElement.matchId}: ${matchResponse.status}`)
+            // Still add the match without VODs
+            matchData.push({
+              href: matchElement.fullUrl,
+              matchId: matchElement.matchId,
+              vodLinks: [],
+              matchInfo: {
+                team1: { name: matchElement.matchTeam1Name, logo: null },
+                team2: { name: matchElement.matchTeam2Name, logo: null },
+                score: matchElement.score,
+                winner: matchElement.score.winner
+              },
+              tournament: matchElement.tournament
+            })
           }
-
-          return {
+        } catch (error) {
+          console.error(`Error fetching match ${matchElement.matchId}:`, error)
+          // Still add the match without VODs
+          matchData.push({
             href: matchElement.fullUrl,
             matchId: matchElement.matchId,
-            vodLinks,
-            matchInfo: matchElement.matchTeam1Name && matchElement.matchTeam2Name ? {
+            vodLinks: [],
+            matchInfo: {
               team1: { name: matchElement.matchTeam1Name, logo: null },
               team2: { name: matchElement.matchTeam2Name, logo: null },
               score: matchElement.score,
               winner: matchElement.score.winner
-            } : undefined,
+            },
             tournament: matchElement.tournament
-          } as MatchData
-        })()
-
-        matchPromises.push(promise)
+          })
+        }
       }
 
-      // Wait for all match processing to complete
-      const matches = (await Promise.all(matchPromises)).filter((m): m is MatchData => m !== null)
+      console.log(`Successfully fetched ${matchData.length} matches with ${matchData.filter(m => m.vodLinks.length > 0).length} having VODs`)
 
       return {
-        matches,
-        totalMatches: matches.length,
-        fetchedMatches: matches.length,
-        matchesWithVODs: matches.filter(m => m.vodLinks && m.vodLinks.length > 0).length,
-        latestMatch: matches.length > 0 ? matches[0] : null,
+        matches: matchData.map(match => ({
+          href: match.href,
+          matchId: match.matchId,
+          vodLinks: match.vodLinks,
+          hasVODs: match.vodLinks.length > 0,
+          matchInfo: match.matchInfo,
+          tournament: match.tournament
+        })),
+        totalMatches: matchData.length,
+        fetchedMatches: matchData.length,
+        matchesWithVODs: matchData.filter(m => m.vodLinks.length > 0).length,
+        latestMatch: matchData.length > 0 ? matchData[0] : null,
         requestedLimit: matchLimit
       }
     }
