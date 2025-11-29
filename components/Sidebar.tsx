@@ -1463,38 +1463,6 @@ export default function Sidebar({ onLoadSession, onShowMeta, onLogoClick }: Side
                         </AnimatePresence>
                     </div>
 
-                    {/* Meta Icon */}
-                    <Tooltip
-                        content="Meta"
-                        placement="right"
-                        classNames={{
-                            content: "bg-black text-white rounded-lg px-2 py-1 text-xs"
-                        }}
-                    >
-                        <button
-                            onClick={() => {
-                                if (onShowMeta) {
-                                    onShowMeta()
-                                }
-                            }}
-                            className="flex items-center gap-4 text-gray-500 hover:text-black transition-colors"
-                        >
-                            <MetaIcon className="w-6 h-6 flex-shrink-0" />
-                            <AnimatePresence>
-                                {isExpanded && (
-                                    <motion.span
-                                        initial={{ opacity: 0 }}
-                                        animate={{ opacity: 1 }}
-                                        exit={{ opacity: 0 }}
-                                        className="whitespace-nowrap font-medium"
-                                    >
-                                        Meta
-                                    </motion.span>
-                                )}
-                            </AnimatePresence>
-                        </button>
-                    </Tooltip>
-
                     {/* Projects Icon */}
                     <div className="flex flex-col">
                         <Tooltip

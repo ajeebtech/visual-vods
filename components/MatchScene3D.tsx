@@ -1045,12 +1045,12 @@ export default function MatchScene3D({
       </div>
 
       {/* Info overlay */}
-      <div className="fixed top-4 left-24 z-40 bg-white/90 backdrop-blur-sm rounded-lg px-4 py-2 shadow-lg">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            {/* Session owner info */}
+      <div className="fixed top-4 left-24 z-40 bg-white/90 backdrop-blur-sm rounded-lg shadow-lg overflow-hidden">
+        <div className="flex items-center justify-between gap-4 px-4 py-2">
+          <div className="flex-1 flex items-center gap-3">
+            {/* Session owner info - always visible */}
             {sessionOwner && (
-              <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-200">
+              <>
                 {sessionOwner.avatar_url ? (
                   <img
                     src={sessionOwner.avatar_url}
@@ -1067,167 +1067,257 @@ export default function MatchScene3D({
                 <p className="text-xs text-gray-600">
                   Created by <span className="font-medium text-gray-900">{sessionOwner.username}</span>
                 </p>
-              </div>
-            )}
-            <p className="text-sm font-medium text-gray-900">
-              {filteredMatches.length} matches (limit {matchLimit}) • {matchesToDisplay.length} visible • {loadedThumbnails.size} thumbnails loaded
-            </p>
-            <p className="text-xs text-gray-600 mt-1">
-              swipe around to navigate • use the scroll wheel to zoom
-            </p>
-            {matchesToDisplay.length < filteredMatches.length && (
-              <p className="text-xs text-blue-600 mt-1">
-                Loading matches... ({matchesToDisplay.length} / {filteredMatches.length} shown)
-              </p>
-            )}
-            {loadedThumbnails.size < matchesToDisplay.length && (
-              <p className="text-xs text-blue-600 mt-1">
-                Loading thumbnails... ({matchesToDisplay.length - loadedThumbnails.size} remaining)
-              </p>
+              </>
             )}
 
-            {/* View Mode Toggle - Icon only buttons */}
-            <div className="flex items-center gap-2 mt-3 pt-2 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={() => setViewMode('3d')}
-                className={`w-8 h-8 rounded-lg transition flex items-center justify-center ${viewMode === '3d'
-                  ? 'bg-gray-900 text-white shadow-md'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                title="3D Spiral View"
-              >
-                <svg className="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
-                  <path d="M136,136a8,8,0,0,1,8,8,16,16,0,0,1-16,16,24,24,0,0,1-24-24,32,32,0,0,1,32-32,40,40,0,0,1,40,40,48,48,0,0,1-48,48,56,56,0,0,1-56-56,64,64,0,0,1,64-64,72,72,0,0,1,72,72,80,80,0,0,1-80,80,88,88,0,0,1-88-88,96,96,0,0,1,96-96A104,104,0,0,1,240,144" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('list')}
-                className={`w-8 h-8 rounded-lg transition flex items-center justify-center ${viewMode === 'list'
-                  ? 'bg-gray-900 text-white shadow-md'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                title="List View"
-              >
-                <List className="w-4 h-4" />
-              </button>
-            </div>
+            {/* Session Save Status - inline when collapsed */}
+            <AnimatePresence mode="wait">
+              {isStatsMinimized && (
+                <motion.div
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0, opacity: 0 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 20 }}
+                  className="ml-auto"
+                >
+                  {isSavingSession ? (
+                    <div className="flex items-center gap-2 text-xs text-blue-600">
+                      <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
+                    </div>
+                  ) : isSessionSaved && sessionId ? (
+                    <div className="flex items-center justify-end">
+                      <Check className="w-4 h-4 text-green-500" />
+                    </div>
+                  ) : sessionId ? (
+                    <div className="flex items-center justify-end">
+                      <div className="w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+                    </div>
+                  ) : null}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
-          {/* Session Save Status */}
-          <div className="flex flex-col items-end gap-1">
-            {isSavingSession ? (
-              <div className="flex items-center gap-2 text-xs text-blue-600">
-                <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
-                <span>Saving session...</span>
-              </div>
-            ) : isSessionSaved && sessionId ? (
-              <div className="flex items-center justify-end">
-                <Check className="w-4 h-4 text-green-500" />
-              </div>
-            ) : sessionId ? (
-              <div className="flex items-center justify-end">
-                <div className="w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-                <span className="w-2 h-2 bg-gray-400 rounded-full"></span>
-                <span>Preparing to save...</span>
-              </div>
-            )}
-            {saveError && (
-              <p className="text-xs text-red-600 max-w-[200px] text-right">{saveError}</p>
-            )}
-          </div>
+          {/* Collapse/Expand button */}
+          <motion.button
+            onClick={() => setIsStatsMinimized(!isStatsMinimized)}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            className="flex items-center justify-center w-6 h-6 rounded hover:bg-gray-200 transition-colors flex-shrink-0"
+            title={isStatsMinimized ? "Expand" : "Collapse"}
+          >
+            <motion.div
+              animate={{ rotate: isStatsMinimized ? 180 : 0 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            >
+              <ChevronUp className="w-4 h-4 text-gray-600" />
+            </motion.div>
+          </motion.button>
         </div>
+
+        {/* Collapsible content */}
+        <AnimatePresence mode="wait">
+          {!isStatsMinimized && (
+            <motion.div
+              initial={{ height: 0, opacity: 0, scale: 0.95 }}
+              animate={{ height: 'auto', opacity: 1, scale: 1 }}
+              exit={{ height: 0, opacity: 0, scale: 0.95 }}
+              transition={{
+                height: {
+                  type: "spring",
+                  stiffness: 400,
+                  damping: 35,
+                  mass: 0.8
+                },
+                opacity: {
+                  duration: 0.15,
+                  ease: "easeInOut"
+                },
+                scale: {
+                  duration: 0.2,
+                  ease: [0.4, 0, 0.2, 1]
+                }
+              }}
+              className="overflow-hidden origin-top"
+            >
+              <motion.div
+                initial={{ y: -10, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: -5, opacity: 0 }}
+                transition={{
+                  type: "spring",
+                  stiffness: 400,
+                  damping: 30,
+                  opacity: { duration: 0.1 }
+                }}
+                className="px-4 pb-2 pt-2 border-t border-gray-200"
+              >
+                <p className="text-sm font-medium text-gray-900">
+                  {filteredMatches.length} matches (limit {matchLimit}) • {matchesToDisplay.length} visible • {loadedThumbnails.size} thumbnails loaded
+                </p>
+                <p className="text-xs text-gray-600 mt-1">
+                  swipe around to navigate • use the scroll wheel to zoom
+                </p>
+                {matchesToDisplay.length < filteredMatches.length && (
+                  <p className="text-xs text-blue-600 mt-1">
+                    Loading matches... ({matchesToDisplay.length} / {filteredMatches.length} shown)
+                  </p>
+                )}
+                {loadedThumbnails.size < matchesToDisplay.length && (
+                  <p className="text-xs text-blue-600 mt-1">
+                    Loading thumbnails... ({matchesToDisplay.length - loadedThumbnails.size} remaining)
+                  </p>
+                )}
+
+                {/* View Mode Toggle - Icon only buttons */}
+                <div className="flex items-center gap-2 mt-3 pt-2 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('3d')}
+                    className={`w-8 h-8 rounded-lg transition flex items-center justify-center ${viewMode === '3d'
+                      ? 'bg-gray-900 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    title="3D Spiral View"
+                  >
+                    <svg className="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
+                      <path d="M136,136a8,8,0,0,1,8,8,16,16,0,0,1-16,16,24,24,0,0,1-24-24,32,32,0,0,1,32-32,40,40,0,0,1,40,40,48,48,0,0,1-48,48,56,56,0,0,1-56-56,64,64,0,0,1,64-64,72,72,0,0,1,72,72,80,80,0,0,1-80,80,88,88,0,0,1-88-88,96,96,0,0,1,96-96A104,104,0,0,1,240,144" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="16" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('list')}
+                    className={`w-8 h-8 rounded-lg transition flex items-center justify-center ${viewMode === 'list'
+                      ? 'bg-gray-900 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    title="List View"
+                  >
+                    <List className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Session Save Status - shown when expanded */}
+                <div className="flex items-center justify-end gap-2 mt-2 pt-2 border-t border-gray-200">
+                  {isSavingSession ? (
+                    <div className="flex items-center gap-2 text-xs text-blue-600">
+                      <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
+                      <span>Saving session...</span>
+                    </div>
+                  ) : isSessionSaved && sessionId ? (
+                    <div className="flex items-center gap-2 text-xs text-green-600">
+                      <Check className="w-4 h-4 text-green-500" />
+                      <span>Saved</span>
+                    </div>
+                  ) : sessionId ? (
+                    <div className="flex items-center gap-2 text-xs text-gray-600">
+                      <div className="w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+                      <span>Saving...</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <span className="w-2 h-2 bg-gray-400 rounded-full"></span>
+                      <span>Preparing to save...</span>
+                    </div>
+                  )}
+                  {saveError && (
+                    <p className="text-xs text-red-600">{saveError}</p>
+                  )}
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
+
 
       {/* Embed Modal */}
       <AnimatePresence>
-        {selectedMatch && selectedVOD && selectedVOD.embedUrl && (
-          <motion.div
-            initial={{ opacity: 0, backdropFilter: 'blur(0px)' }}
-            animate={{ opacity: 1, backdropFilter: 'blur(8px)' }}
-            exit={{ opacity: 0, backdropFilter: 'blur(0px)' }}
-            transition={{ duration: 0.4 }}
-            className="fixed inset-0 z-[200] flex items-center justify-center p-4"
-            style={{
-              background: 'radial-gradient(circle at center, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.95) 100%)'
-            }}
-            onClick={closeEmbed}
-          >
+        {
+          selectedMatch && selectedVOD && selectedVOD.embedUrl && (
             <motion.div
-              initial={{ scale: 0.8, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              transition={{
-                type: "spring",
-                stiffness: 300,
-                damping: 25,
-                duration: 0.5
+              initial={{ opacity: 0, backdropFilter: 'blur(0px)' }}
+              animate={{ opacity: 1, backdropFilter: 'blur(8px)' }}
+              exit={{ opacity: 0, backdropFilter: 'blur(0px)' }}
+              transition={{ duration: 0.4 }}
+              className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+              style={{
+                background: 'radial-gradient(circle at center, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.95) 100%)'
               }}
-              className="relative w-full max-w-7xl flex gap-4"
-              onClick={(e) => e.stopPropagation()}
+              onClick={closeEmbed}
             >
-              {/* Left column: Video and map buttons */}
-              <div className="flex-1 flex flex-col gap-3">
-                {/* Video container */}
-                <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
-                  {/* Close button */}
-                  <button
-                    onClick={closeEmbed}
-                    className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors"
-                  >
-                    <X className="w-6 h-6 text-white" />
-                  </button>
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                transition={{
+                  type: "spring",
+                  stiffness: 300,
+                  damping: 25,
+                  duration: 0.5
+                }}
+                className="relative w-full max-w-7xl flex gap-4"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Left column: Video and map buttons */}
+                <div className="flex-1 flex flex-col gap-3">
+                  {/* Video container */}
+                  <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
+                    {/* Close button */}
+                    <button
+                      onClick={closeEmbed}
+                      className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors"
+                    >
+                      <X className="w-6 h-6 text-white" />
+                    </button>
 
-                  {/* Embed iframe */}
-                  <iframe
-                    ref={youtubeIframeRef}
-                    src={selectedVOD.embedUrl.includes('enablejsapi')
-                      ? selectedVOD.embedUrl
-                      : `${selectedVOD.embedUrl}${selectedVOD.embedUrl.includes('?') ? '&' : '?'}enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}`}
-                    className="w-full h-full"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    title={`Match ${selectedMatch.matchId} VOD`}
-                  />
+                    {/* Embed iframe */}
+                    <iframe
+                      ref={youtubeIframeRef}
+                      src={selectedVOD.embedUrl.includes('enablejsapi')
+                        ? selectedVOD.embedUrl
+                        : `${selectedVOD.embedUrl}${selectedVOD.embedUrl.includes('?') ? '&' : '?'}enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}`}
+                      className="w-full h-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      title={`Match ${selectedMatch.matchId} VOD`}
+                    />
+                  </div>
+
+                  {/* VOD selector if multiple VODs - now below the video */}
+                  {selectedMatch.vodLinks.length > 1 && (
+                    <div className="flex gap-2 overflow-x-auto px-1">
+                      {selectedMatch.vodLinks.map((vod, index) => (
+                        <button
+                          key={index}
+                          onClick={() => setSelectedVOD(vod)}
+                          className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${selectedVOD === vod
+                            ? 'bg-purple-600 text-white shadow-lg'
+                            : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                            }`}
+                        >
+                          {vod.mapName || `YouTube ${index + 1}`}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                {/* VOD selector if multiple VODs - now below the video */}
-                {selectedMatch.vodLinks.length > 1 && (
-                  <div className="flex gap-2 overflow-x-auto px-1">
-                    {selectedMatch.vodLinks.map((vod, index) => (
-                      <button
-                        key={index}
-                        onClick={() => setSelectedVOD(vod)}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${selectedVOD === vod
-                          ? 'bg-purple-600 text-white shadow-lg'
-                          : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                          }`}
-                      >
-                        {vod.mapName || `YouTube ${index + 1}`}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Notes Panel */}
-              <div className="flex-shrink-0">
-                <NotesPanel
-                  sessionId={sessionId}
-                  matchHref={selectedMatch.href}
-                  vodUrl={selectedVOD.url}
-                  onTimestampClick={handleTimestampClick}
-                  youtubeIframeRef={youtubeIframeRef}
-                />
-              </div>
+                {/* Notes Panel */}
+                <div className="flex-shrink-0">
+                  <NotesPanel
+                    sessionId={sessionId}
+                    matchHref={selectedMatch.href}
+                    vodUrl={selectedVOD.url}
+                    onTimestampClick={handleTimestampClick}
+                    youtubeIframeRef={youtubeIframeRef}
+                  />
+                </div>
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          )
+        }
+      </AnimatePresence >
     </>
   )
 }

@@ -119,7 +119,9 @@ function MatchListItem({
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
             onClick={onClick}
-            className={`group flex gap-4 p-3 rounded-lg hover:bg-gray-50 cursor-pointer transition-all ${hasNotes ? 'border-l-4 border-orange-500 bg-orange-50/30' : ''
+            className={`group flex gap-4 p-3 rounded-lg hover:bg-gray-50 cursor-pointer transition-all border-2 ${hasNotes
+                    ? 'border-orange-500 bg-orange-50/30'
+                    : 'border-gray-300 hover:border-gray-400'
                 }`}
         >
             {/* Thumbnail */}

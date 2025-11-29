@@ -695,7 +695,7 @@ export default function Home() {
                   transition={{ duration: 0.5 }}
                   className="text-4xl md:text-5xl font-bold text-black mb-8 text-center"
                 >
-                  What would you like to analyze today?
+                  What would you like to see today?
                 </motion.h1>
               )}
             </AnimatePresence>
