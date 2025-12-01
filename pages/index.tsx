@@ -607,12 +607,21 @@ export default function Home() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!user) {
+    // Check if user has already used their free search
+    const hasUsedFreeSearch = typeof window !== 'undefined' && localStorage.getItem('hasUsedFreeSearch') === 'true'
+
+    // If not authenticated and has already used free search, require sign-in
+    if (!user && hasUsedFreeSearch) {
       openSignIn()
       return
     }
 
     if (team1 || team2 || tournament || playerName) {
+      // Mark free search as used if user is not authenticated
+      if (!user && typeof window !== 'undefined') {
+        localStorage.setItem('hasUsedFreeSearch', 'true')
+      }
+
       setHasSubmitted(true)
       await fetchMatches()
 
