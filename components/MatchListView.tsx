@@ -120,8 +120,8 @@ function MatchListItem({
             transition={{ duration: 0.3 }}
             onClick={onClick}
             className={`group flex gap-4 p-3 rounded-lg hover:bg-gray-50 cursor-pointer transition-all border-2 ${hasNotes
-                    ? 'border-orange-500 bg-orange-50/30'
-                    : 'border-gray-300 hover:border-gray-400'
+                ? 'border-orange-500 bg-orange-50/30'
+                : 'border-gray-300 hover:border-gray-400'
                 }`}
         >
             {/* Thumbnail */}
@@ -263,7 +263,7 @@ export default function MatchListView({
     searchedTeamName,
 }: MatchListViewProps) {
     return (
-        <div className="fixed inset-0 z-30 bg-gray-50 pt-24 pb-20 pl-24">
+        <div className="fixed inset-0 z-10 bg-gray-50 pt-24 pb-20 pl-24">
             <div className="max-w-5xl mx-auto h-full">
                 <ScrollArea className="h-full px-6">
                     <div className="space-y-3 pb-6">

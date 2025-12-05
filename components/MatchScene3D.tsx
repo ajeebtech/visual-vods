@@ -477,6 +477,13 @@ export default function MatchScene3D({
     if (initialSessionId) {
       setSessionId(initialSessionId)
       setIsSessionSaved(true) // Existing session is already saved
+    } else {
+      // If initialSessionId is null (e.g. new search), reset to allow saving new session
+      console.log('[MatchScene3D] No initialSessionId provided, treating as new session')
+      setSessionId(null)
+      setIsSessionSaved(false)
+      // Reset loaded thumbnails since we're starting a new search
+      setLoadedThumbnails(new Set())
     }
   }, [initialSessionId])
 

@@ -622,6 +622,9 @@ export default function Home() {
         localStorage.setItem('hasUsedFreeSearch', 'true')
       }
 
+      // Reset loadedSessionId to ensure a new session is created for this new search
+      setLoadedSessionId(null)
+
       setHasSubmitted(true)
       await fetchMatches()
 
@@ -729,6 +732,7 @@ export default function Home() {
                     className="flex-1 min-w-[150px]"
                     showLogo={true}
                     selectedLogo={team1Logo}
+                    openUpwards={hasSubmitted}
                   />
 
                   {/* VS Divider */}
@@ -754,6 +758,7 @@ export default function Home() {
                     className="flex-1 min-w-[150px]"
                     showLogo={true}
                     selectedLogo={team2Logo}
+                    openUpwards={hasSubmitted}
                   />
                   <SearchableSelect
                     placeholder="Tournament (optional)"
@@ -762,6 +767,7 @@ export default function Home() {
                     onSearch={searchTournaments}
                     className="flex-1 min-w-[150px]"
                     disabled={false}
+                    openUpwards={hasSubmitted}
                   />
                   <SearchableSelect
                     placeholder="Player Name"
@@ -770,6 +776,7 @@ export default function Home() {
                     onSearch={searchPlayerName}
                     className="flex-1 min-w-[150px]"
                     disabled={true}
+                    openUpwards={hasSubmitted}
                   />
                 </div>
 

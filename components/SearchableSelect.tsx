@@ -14,6 +14,7 @@ interface SearchableSelectProps {
   disabled?: boolean
   showLogo?: boolean // Whether to show logos (for team searches)
   selectedLogo?: string | null // Logo URL for the selected value
+  openUpwards?: boolean // Whether to open the dropdown upwards
 }
 
 export default function SearchableSelect({
@@ -25,6 +26,7 @@ export default function SearchableSelect({
   disabled = false,
   showLogo = false,
   selectedLogo: externalLogo = null,
+  openUpwards = false,
 }: SearchableSelectProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -217,7 +219,10 @@ export default function SearchableSelect({
       </div>
 
       {isOpen && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border bg-white shadow-lg">
+        <div className={cn(
+          "absolute z-50 w-full rounded-md border bg-white shadow-lg",
+          openUpwards ? "bottom-full mb-1" : "mt-1"
+        )}>
           <div className="max-h-60 overflow-auto p-1">
             {isLoading ? (
               <div className="px-2 py-1.5 text-sm text-gray-500">
