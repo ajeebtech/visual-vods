@@ -825,7 +825,7 @@ export default function Home() {
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ delay: 0.2, duration: 0.3 }}
-                className="bg-white rounded-2xl shadow-2xl border border-gray-200 p-8 max-w-4xl w-full mx-4"
+                className="w-full mx-4"
               >
                 <AILoadingState />
               </motion.div>
