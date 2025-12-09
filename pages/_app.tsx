@@ -1,6 +1,7 @@
 import type { AppProps } from 'next/app'
 import { ClerkProvider } from '@clerk/nextjs'
 import { HeroUIProvider } from "@heroui/react"
+import { Analytics } from '@vercel/analytics/next'
 import SupabaseProvider from '@/lib/supabase-client'
 import '../styles/globals.css'
 
@@ -10,6 +11,7 @@ export default function App({ Component, pageProps }: AppProps) {
       <SupabaseProvider>
     <HeroUIProvider>
       <Component {...pageProps} />
+      <Analytics />
     </HeroUIProvider>
       </SupabaseProvider>
     </ClerkProvider>
